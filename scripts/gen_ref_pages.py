@@ -186,7 +186,9 @@ def generate_site_nav() -> None:
     lines = ["* [Home](index.md)\n"]
     for section, pinned in AUTHORED_SECTIONS:
         lines += section_lines(section, pinned)
-    # Trailing slash defers to reference/SUMMARY.md (nested literate-nav).
+    # Trailing slash defers to reference/SUMMARY.md (nested literate-nav). This
+    # directory link is the literate-nav nesting idiom; it trips mkdocs'
+    # `unrecognized_links` check (held at `info`, see mkdocs.yml).
     lines.append("* [API Reference](reference/)\n")
 
     with mkdocs_gen_files.open("SUMMARY.md", "w") as nav_file:

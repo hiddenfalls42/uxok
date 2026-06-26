@@ -10,7 +10,33 @@ from typing import Any
 class CoreConfig:
     """Core system configuration.
 
-    All configuration is validated on creation.
+    All configuration is validated on creation. ``Core(**kwargs)`` forwards its
+    keyword arguments straight to this dataclass, so every field below is also a
+    valid ``Core`` keyword argument.
+
+    Attributes:
+        max_plugins: Maximum number of plugins, enforced by the registry at
+            registration time.
+        blocked_plugins: Plugin names refused at registration.
+        hook_precaching: Hook precaching mode — ``"disabled"`` or
+            ``"on_core_start"``.
+        capability_collision: Policy when two plugins provide the same
+            capability — ``"error_on_conflict"``, ``"first_wins"``, or
+            ``"last_wins_with_warning"``.
+        capability_selection: Which provider ``get_capability()`` returns from a
+            provider list — ``"first_registered"`` or ``"last_registered"``.
+        capability_missing: Behavior when a requested capability has no provider
+            — ``"raise"`` or ``"return_none"``.
+        capability_access: Access posture (RFC 0001) — ``"open"``,
+            ``"declared"``, or ``"sealed"``.
+        tick_rate: Ticks per second (1000 Hz = 1 ms precision).
+        tick_slip_threshold: Emit ``core.tick_slip`` when slip reaches this many
+            tick periods.
+        tick_precision: Clock wait strategy — ``"sleep"`` or ``"hybrid"``.
+        tick_busy_wait_us: Microseconds of busy-wait in hybrid precision mode.
+        tick_catchup: Behavior after a stall — ``"skip"`` jumps to the current
+            boundary, ``"burst"`` replays every missed tick.
+        plugin_configs: Per-plugin configuration namespaces.
     """
 
     # Plugin limits (enforced by the registry at registration time)

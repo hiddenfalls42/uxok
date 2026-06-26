@@ -21,10 +21,19 @@ validation:
     omitted_files: warn
     not_found: warn
   links:
-    not_found: warn
+    not_found: warn        # the real gate: links to pages that don't exist
     anchors: info
     absolute_links: warn
-    unrecognized_links: warn
+    # mkdocs' own default is `info`. Held there (not `warn`) because the
+    # generated reference/ nested literate-nav uses a trailing-slash directory
+    # link, which this check flags as "unrecognized". `not_found` still catches
+    # genuinely broken targets.
+    unrecognized_links: info
+
+# DOCS-CHANGELOG.md is a meta log, deliberately outside the reader-facing nav.
+# (top-level option, gitignore-style patterns relative to the docs dir)
+not_in_nav: |
+  DOCS-CHANGELOG.md
 
 theme:
   name: material

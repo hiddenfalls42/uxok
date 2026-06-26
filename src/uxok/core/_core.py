@@ -97,18 +97,9 @@ class Core(CoreProtocol):
     def __init__(self, **kwargs: Any) -> None:
         """Initialize the core system.
 
-        Args:
-            max_plugins: Maximum number of plugins (default 100, enforced).
-            blocked_plugins: Set of blocked plugin names.
-            hook_precaching: Hook precaching mode ("disabled", "on_core_start").
-            capability_collision: Collision policy.
-            capability_selection: Selection policy.
-            capability_missing: Missing capability behavior.
-            tick_rate: Ticks per second.
-            tick_slip_threshold: Tick slip threshold.
-            tick_precision: Tick precision mode.
-            tick_busy_wait_us: Busy-wait microseconds for hybrid mode.
-            plugin_configs: Per-plugin configuration namespaces.
+        Accepts any ``CoreConfig`` field as a keyword argument; the kwargs are
+        passed straight to ``CoreConfig``, which validates them. See
+        ``CoreConfig`` for the full field set, defaults, and accepted values.
         """
         # Unique instance ID
         self._id = uuid4()

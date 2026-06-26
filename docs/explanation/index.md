@@ -1,6 +1,6 @@
 # Explanation
 
-These pages explain why uxok is built the way it is. Each one focuses on a single concept — the design decisions behind it, the tradeoffs it makes, and the mental model a plugin author needs to use it well. For step-by-step tasks, see [How-to](../how-to/index.md). For API signatures, see [Reference](../reference/).
+These pages explain why uxok is built the way it is. Each one focuses on a single concept — the design decisions behind it, the tradeoffs it makes, and the mental model a plugin author needs to use it well. For step-by-step tasks, see [How-to](../how-to/index.md). For API signatures, see [Reference](../reference/uxok/index.md).
 
 - [Architecture overview](architecture-overview.md) — The kernel model: five core primitives, the plugin layer that builds on top of them, and why the boundary between kernel and plugin is a hard line.
 - [Plugin architecture](plugin-architecture.md) — How a plugin progresses from instantiation through registration, start, running, and stop; the base class, decorator system, metadata declarations, and hot-loading safety.

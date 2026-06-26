@@ -76,4 +76,4 @@ The kernel boundary is enforced in tests. Application code imports the kernel; t
 
 ## Further reading
 
-For how to build a plugin from scratch, see the [getting started tutorial](../tutorials/getting-started.md). For the design rationale specific to each primitive, see the sibling explanation pages: [capability system](capability-system.md), [event system](event-system.md), [hook system](hook-system.md), [plugin architecture](plugin-architecture.md), [state management](state-management.md), and [tick system](tick-system.md). For the API surface, see the [reference documentation](../reference/).
+For how to build a plugin from scratch, see the [getting started tutorial](../tutorials/getting-started.md). For the design rationale specific to each primitive, see the sibling explanation pages: [capability system](capability-system.md), [event system](event-system.md), [hook system](hook-system.md), [plugin architecture](plugin-architecture.md), [state management](state-management.md), and [tick system](tick-system.md). For the API surface, see the [reference documentation](../reference/uxok/index.md).

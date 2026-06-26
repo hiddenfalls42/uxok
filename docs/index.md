@@ -47,6 +47,6 @@ Task-oriented guides for specific goals. Assumes you already have uxok running a
 
 Architecture, design decisions, and concepts. Covers why the primitives are shaped the way they are and what tradeoffs that creates.
 
-### [API reference](reference/)
+### [API reference](reference/uxok/index.md)
 
 Complete API documentation for all public modules, classes, and functions. Generated from source docstrings.

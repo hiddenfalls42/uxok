@@ -1,0 +1,80 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv/
+.venv
+
+# Testing
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+coverage.xml
+coverage.json
+*.cover
+.benchmarks/
+.hypothesis/
+
+# Type checking
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pytype/
+
+# IDEs
+.vscode/
+.idea/
+.cursor/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Claude Code config: track the durable, shared machinery (agents, skills,
+# workflows); keep per-agent memory and any local cache/settings out.
+.claude/*
+!.claude/agents/
+!.claude/skills/
+!.claude/workflows/
+.obsidian/
+.opencode/
+
+# Ruff
+.ruff_cache/
+
+# Documentation builds
+docs/_build/
+site/
+plans/
+
+# Project specific
+*.log
+.env
+.env.local

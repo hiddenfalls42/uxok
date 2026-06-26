@@ -1,0 +1,174 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "uxok"
+version = "0.1.0"
+description = "A hot-loading plugin microkernel for Python"
+readme = "README.md"
+requires-python = ">=3.12"
+license = {text = "MIT"}
+authors = [
+  {name = "hiddenfalls42", email = "ingcrockett@gmail.com"}
+]
+keywords = ["plugin", "kernel", "microkernel", "hot-loading", "async", "hooks", "events", "framework", "uxok"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Typing :: Typed",
+]
+
+# The kernel has zero runtime dependencies by design.
+dependencies = []
+
+[project.urls]
+Repository = "https://github.com/hiddenfalls42/uxok"
+Changelog = "https://github.com/hiddenfalls42/uxok/blob/main/CHANGELOG.md"
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=9.0.0",
+  "pytest-asyncio>=1.2.0",
+  "pytest-cov>=7.0.0",
+  "pytest-xdist>=3.0.0",
+  "pytest-mock>=3.14.0",
+  "pytest-randomly>=3.16.0",
+  "pytest-benchmark>=5.0.0",
+  "pytest-timeout>=2.3.0",
+  "pytest-retry>=0.6.0",
+  "hypothesis>=6.155.0",
+  "factory-boy>=3.3.0",
+  "faker>=30.0.0",
+  # Floor tracks the formatter version the tree is formatted against; bumping it
+  # risks reintroducing format drift (the 0.15 series produced the current output).
+  "ruff>=0.15.0",
+  "locust>=2.29.0",
+  "bandit>=1.9.0",
+  "safety>=3.8.0",
+  "mypy>=2.1.0",
+  "types-requests>=2.32.0",
+  # Used by scripts/api_inventory.py to catalog the public surface.
+  "griffe>=2.0.0",
+  # Docstring gates (CI `docstrings` job): interrogate measures public-surface
+  # coverage; pydoclint checks each docstring matches its signature.
+  "interrogate>=1.7.0",
+  "pydoclint>=0.8.0",
+]
+
+docs = [
+  "mkdocs-material>=9,<10",
+  "mkdocstrings[python]>=1.0,<2",
+  "mkdocs-gen-files>=0.6,<1",
+  "mkdocs-literate-nav>=0.6,<1",
+  "mkdocs-section-index>=0.3,<1",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+uxok = ["py.typed"]
+
+# Curated rule set (decision record #13): rules the project acts on, zero
+# violations enforced via `ruff check src tests plugins`.
+# Kernel (src/) and reference plugins (plugins/) are held to the full set;
+# tests relax annotation/style pedantry.
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = ["src", "tests", "plugins"]
+
+[tool.ruff.lint]
+select = [
+  "E", "W", "F", "I", "N", "UP", "ANN", "ASYNC", "S", "B", "A", "C4", "DTZ", "T10", "ISC", "PIE", "T20", "PT", "Q", "RSE", "RET", "SIM", "ARG", "PTH", "RUF"
+]
+ignore = [
+  "S101",
+  # Any is the kernel's deliberate idiom for event/hook payloads and
+  # protocol-level plumbing; annotating it away adds noise, not safety.
+  "ANN401",
+  # kwargs/args annotations on conveniences (emit, hook) are pedantry.
+  "ANN002", "ANN003",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests: correctness rules stay (F, B, PT015/B011); annotation/style pedantry relaxed.
+"tests/**/*.py" = [
+  "S101", "PLR2004", "ANN", "ARG", "E501", "T20", "PT011", "S108",
+  "ASYNC", "S110", "RUF059", "F841", "RUF043", "N812", "SIM105", "DTZ",
+  "SIM117", "B007", "RET504", "PT012", "S105",
+  "PT018", "RUF013", "SIM102", "SIM108", "RUF001", "RUF003", "S311",
+  "B905", "E731", "E402", "PTH", "RUF012", "RUF015", "PT028",
+]
+# Devops/CLI tooling: print is the output channel, subprocess shells to git, and
+# changelog dates use the local day — all inherent to these scripts.
+"scripts/**/*.py" = [
+  "ANN", "T20", "S", "E501", "ARG", "DTZ", "PTH",
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"
+
+# NOTE: pytest configuration lives in pytest.ini (authoritative). A previous
+# [tool.pytest.ini_options] section here was dead config — pytest ignores it
+# when pytest.ini exists — and was the source of the phantom "95% coverage"
+# claim. Coverage gate: see the documented coverage command in CLAUDE.md.
+
+# Docstring COVERAGE gate. Public surface only — mirrors the reference
+# generator's `filters: ["!^_"]`, so private names are never required to have
+# docstrings. fail-under is a placeholder: the CI `docstrings` job is
+# non-blocking until the first run reports the real baseline.
+# TODO: set fail-under to the measured baseline, then ratchet up and flip the
+# CI job to blocking (drop its continue-on-error).
+[tool.interrogate]
+ignore-init-method = true
+ignore-private = true
+ignore-magic = true
+ignore-module = false
+ignore-nested-functions = true
+ignore-property-decorators = true
+exclude = ["tests", "scripts"]
+fail-under = 80
+verbose = 2
+
+# Docstring-vs-SIGNATURE consistency. interrogate owns existence; pydoclint
+# checks the docstrings that exist agree with the code (arg names, returns,
+# raises) — the param drift the docs auditor otherwise catches by hand.
+[tool.pydoclint]
+style = "google"
+exclude = '\.git|tests|scripts'
+skip-checking-short-docstrings = true
+# Types live in annotations and are rendered by mkdocstrings; don't also demand
+# them in the docstring text.
+arg-type-hints-in-docstring = false
+
+[tool.coverage.run]
+source = ["src"]
+branch = true
+parallel = true
+omit = ["tests/*", "*/site-packages/*"]
+
+[tool.coverage.report]
+precision = 2
+show_missing = true
+skip_covered = false
+exclude_lines = [
+  "pragma: no cover",
+  "def __repr__",
+  "raise AssertionError",
+  "raise NotImplementedError",
+  "if __name__ == .__main__.:",
+  "if TYPE_CHECKING:",
+  "class .*\\bProtocol\\):",
+  "@(abc\\.)?abstractmethod",
+]
+
+[tool.coverage.html]
+directory = "htmlcov"

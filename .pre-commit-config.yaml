@@ -1,0 +1,36 @@
+# Shift the cheap gates left. Mirrors the CI lint job (ruff check + format);
+# mypy is intentionally left to CI to keep commits fast. Install with:
+#   pip install pre-commit && pre-commit install
+default_install_hook_types: [pre-commit]
+
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.9
+    hooks:
+      - id: ruff
+        name: ruff (lint)
+        # Match the enforced scope from CLAUDE.md / CI.
+        args: [--config=pyproject.toml]
+      - id: ruff-format
+        name: ruff (format)
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-merge-conflict
+      - id: detect-private-key
+
+  # Pre-1.0 API/CHANGELOG coupling. Manual stage only: runnable on demand
+  # (`pre-commit run api-changelog-coupling --hook-stage manual`) but does not
+  # auto-block commits while API.md is in flux.
+  - repo: local
+    hooks:
+      - id: api-changelog-coupling
+        name: API/CHANGELOG coupling
+        entry: python scripts/check_api_changelog_coupling.py --staged
+        language: system
+        pass_filenames: false
+        stages: [manual]

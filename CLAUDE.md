@@ -86,7 +86,7 @@ The uxok core provides **ONLY** these essential primitives:
 
 **Everything else is a plugin.** 
 
-See `docs/manifests/KERNEL_ARCHITECTURE.md` for complete details.
+See `docs/explanation/architecture-overview.md` for the full architecture overview.
 
 ## Plugin Abstraction
 
@@ -136,7 +136,7 @@ See `docs/manifests/KERNEL_ARCHITECTURE.md` for complete details.
 
 **Remember: uxok's strength is its simplicity. Protect it fiercely.**
 
-See `docs/manifests/FRAMEWORK_PHILOSOPHY.md` for complete philosophy and examples.
+See `docs/explanation/framework-philosophy.md` for the full philosophy and examples.
 
 ## Code Structure
 
@@ -321,8 +321,8 @@ uxok uses an iterative audit-writer loop for documentation development:
 ## Key Documentation
 
 - `docs/manifests/API.md` - **CONSTITUTIONAL API REFERENCE** (single source of truth - 35+ public APIs)
-- `docs/manifests/KERNEL_ARCHITECTURE.md` - Complete kernel architecture guide
-- `docs/manifests/FRAMEWORK_PHILOSOPHY.md` - Design philosophy and principles
+- `docs/explanation/architecture-overview.md` - Kernel architecture guide
+- `docs/explanation/framework-philosophy.md` - Design philosophy and principles
 - `docs/` - Public documentation (tutorials, how-to, explanation, reference)
 
 

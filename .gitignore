@@ -78,3 +78,11 @@ plans/
 *.log
 .env
 .env.local
+
+# Internal tooling & process artifacts — kept locally, not published.
+# (Re-add deliberately if you ever want to showcase the AI setup.)
+.claude/
+docs/agent_data/
+# Manifests: only the programmatically-tested API.md is public for now.
+docs/manifests/FRAMEWORK_PHILOSOPHY.md
+docs/manifests/KERNEL_ARCHITECTURE.md

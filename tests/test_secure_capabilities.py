@@ -3,8 +3,8 @@
 Covers `capability_access` enforcement (`"declared"`) and the attenuated `CoreFacet`
 a plugin holds under the stricter modes. The provider-side `"sealed"` attenuation is
 exercised separately (Step 3). `TestKernelLifecycleGrant` covers the reserved tier-2
-`kernel.lifecycle` grant (RFC 0001 §2d); the reference supervisor's migration onto it is
-exercised in `tests/test_supervisor_plugin.py`.
+`kernel.lifecycle` grant (RFC 0001 §2d) — the sanctioned path for a plugin that needs
+graph control (e.g. a supervisor or loader).
 """
 
 import pytest

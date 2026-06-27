@@ -143,6 +143,9 @@ class HeartbeatPlugin(Plugin):
         await self.emit("heartbeat.tick", {}, at_tick=self.core.tick + self.INTERVAL)
 ```
 
+The `Sensor` in the reference `plugins/example_host/` uses exactly this pattern to emit
+a reading every interval.
+
 The same pattern works with `self.hook()`. The chain terminates naturally when the
 plugin stops: pending `at_tick` entries belonging to the plugin instance are
 cancelled during teardown, so no zombie work fires after unregistration.
@@ -152,7 +155,7 @@ cancelled during teardown, so no zombie work fires after unregistration.
 The tick system is not a task scheduler in the job-queue sense. It does not retry
 failed work, track completion, or guarantee handler ordering. It advances a
 counter and fires work on boundaries. Supervision, retry, and ordering logic
-belong in plugins — for example, the reference `supervisor/` plugin built on uxok.
+belong in plugins, not the kernel.
 
 The tick system is also not the event dispatch model. Dispatch is concurrent
 fire-and-forget: each subscriber runs as an independent asyncio task. There is no

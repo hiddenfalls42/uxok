@@ -73,7 +73,7 @@ State changes use a hook rather than an event for two reasons. First, hooks exec
 
 ## What the state machine does not do
 
-The state machine governs the core. It does not govern individual plugins. Each plugin has its own lifecycle (starting, running, stopping) that the core drives during core state transitions, but a plugin's own failure does not change the core's state. That separation keeps the kernel small: the core does not need to model degraded-plugin conditions, partial availability, or supervision hierarchies. Those concerns belong to the supervisor plugin or equivalent application-level code.
+The state machine governs the core. It does not govern individual plugins. Each plugin has its own lifecycle (starting, running, stopping) that the core drives during core state transitions, but a plugin's own failure does not change the core's state. That separation keeps the kernel small: the core does not need to model degraded-plugin conditions, partial availability, or supervision hierarchies. Those concerns belong to a supervisor plugin or equivalent application-level code.
 
 The transition graph is also fixed. It cannot be extended or overridden. If an application needs different lifecycle semantics — for example, a PAUSED state between RUNNING and STOPPING — the correct approach is to model that within a plugin or with a wrapper, not by modifying the core's state machine.
 

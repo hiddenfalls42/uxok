@@ -92,9 +92,12 @@ commit as its CHANGELOG entry.
   from `def __init__(self, core): super().__init__(core, ...)` to
   `def __init__(self): super().__init__(...)`. Default `capability_access="open"` keeps
   `self.core` as the real `Core`, so runtime behavior is otherwise unchanged.
-- The reference `supervisor` plugin migrated to the coreless `__init__` and now reaches
-  graph control through the `kernel.lifecycle` grant it declares in `requires` (RFC 0001
-  §2d), so it runs unchanged under every `capability_access` mode.
+- Replaced the reference `supervisor` plugin with `plugins/example_host/` — a small,
+  runnable sensor/alerting host that wires every kernel primitive (event bus, hook
+  extension points, capability provider/consumer, lifecycle, the tick system, config
+  schema, state continuity, and graceful shutdown) as a worked "hello world." The deleted
+  supervisor's restart-on-failure policy is no longer shipped; supervision remains a
+  natural plugin to build on the `core.plugin_error`/`core.hook_error` signals.
 - Docs/constitution (RFC 0004 / spec 0005 §4): the `requires ∪ resolves` grant set is
   documented as the complete **invocation** boundary — what a plugin may invoke by name —
   not a reference-isolation boundary. A live reference can still cross a granted return /

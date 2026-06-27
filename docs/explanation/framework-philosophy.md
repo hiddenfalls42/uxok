@@ -26,7 +26,7 @@ The protocol-first discipline also constrains future evolution. When a primitive
 
 ## User choice as a design value
 
-The framework provides tools; users make decisions. uxok does not prescribe a supervision strategy, an error recovery policy, or a concurrency model. It exposes signals — `core.plugin_error`, `core.hook_error` — and then leaves the response to the supervisor plugin or to the application.
+The framework provides tools; users make decisions. uxok does not prescribe a supervision strategy, an error recovery policy, or a concurrency model. It exposes signals — `core.plugin_error`, `core.hook_error` — and then leaves the response to a supervisor plugin or to the application.
 
 This is deliberate. The authors do not know your deployment topology, your failure budget, or your latency constraints. An opinionated framework that bakes in restart-on-failure and circuit breakers would be right for some users and wrong for others. A framework that provides the event bus and the hook system and then steps back is right for all of them, because each can implement the policy they need.
 

@@ -155,8 +155,8 @@ class LifecycleFacet:
 
     Like the other facets it has no ``__getattr__`` passthrough and is not in
     ``uxok.__all__``. The forwarded methods return the **raw** Core results (live
-    plugin instances): a granted tier-2 capability is full authority by design — the
-    canonical holder, the supervisor, must restart real plugins.
+    plugin instances): a granted tier-2 capability is full authority by design — a
+    lifecycle-controlling plugin (e.g. a supervisor or loader) must act on real plugins.
     """
 
     def __init__(self, core: Core) -> None:

@@ -1019,7 +1019,8 @@ Source-dependent extra keys:
 | `"background_task"` | `task_name` |
 
 Failures inside a `core.plugin_error` handler are logged but not re-reported (no error
-loops). The reference consumer is `plugins/supervisor/` (`SupervisorPlugin`).
+loops). A supervisor plugin is the natural consumer: subscribe, count failures, and apply
+a restart policy — all in plugin code, since the kernel only emits the signal.
 
 ### `core.hook_error`
 

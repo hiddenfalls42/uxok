@@ -20,7 +20,7 @@ constitution. All API changes get discussed and reflected there first.
 
 - Pre-1.0: breaking changes allowed, but each must update `API.md` **and** `CHANGELOG.md`
   in the same commit.
-- At 1.0 the constitution locks; changes must be backward compatible thereafter.
+- At 1.0 the API stabilizes and follows SemVer.
 
 ## Essential Commands
 

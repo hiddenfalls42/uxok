@@ -5,8 +5,8 @@
 > to detect non-conformance in the implementation.
 
 > **Versioning policy:** Pre-1.0, breaking changes are allowed; each one must update
-> `CHANGELOG.md` and this document in the same commit. At 1.0 this document locks:
-> no breaking changes without a major-version process.
+> `CHANGELOG.md` and this document in the same commit. At 1.0 the API stabilizes and
+> follows SemVer.
 
 > **Import package:** the kernel is imported as `uxok` (distribution name `uxok` on
 > PyPI). The import package was renamed from `orion_core` to `uxok` pre-1.0; the public

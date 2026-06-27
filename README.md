@@ -40,7 +40,7 @@ asyncio.run(main())
 
 That `provides`/`requires`/`get_capability` loop is what sets uxok apart: plugins are wired by name, never by import, so any provider can be hot-swapped underneath its consumers while the process runs. There's real depth behind each piece — the [documentation](https://hiddenfalls42.github.io/uxok/) covers it with tutorials, how-to guides, architecture deep-dives, and a generated API reference.
 
-I made this python kernel for prototyping self-coding agentic applications that interface with physical components, but it's not limited to that. It started as an experiment with early agentic coding to make a simple library and evolved into a personal passion — and into something that actually works.
+I made this python kernel for prototyping self-coding agentic applications that interface with physical components, but it's not limited to that. It started as an experiment with early agentic coding to make a simple library and evolved into a personal passion — and into something that actually works. It's been built with AI from the start, Claude 3.5 onward — an exercise in using it to do more right, not more fast.
 
 ## How it works
 

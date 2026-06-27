@@ -1,7 +1,7 @@
 # uxok
 
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
-[![MIT License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![MIT License](https://img.shields.io/badge/license-MIT-green.svg)](https://github.com/hiddenfalls42/uxok/blob/main/LICENSE)
 [![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
 [![CI](https://github.com/hiddenfalls42/uxok/actions/workflows/ci.yml/badge.svg)](https://github.com/hiddenfalls42/uxok/actions/workflows/ci.yml)
 
@@ -46,7 +46,7 @@ I made this python kernel for prototyping self-coding agentic applications that 
 
 uxok has a microkernel-style architecture: the core provides only essential primitives for building extensible, self-modifying agentic applications — event-driven communication, hook-based extension points, hot-loading plugins with lifecycle management, and capability-based dependency resolution. Everything else is a plugin you can add, remove, or swap at runtime.
 
-Reach for it when you need plugins you can swap *while the process is running*, not just load once at startup. A complete multi-plugin host lives in [`examples/`](examples/).
+Reach for it when you need plugins you can swap *while the process is running*, not just load once at startup. A complete multi-plugin host lives in [`examples/`](https://github.com/hiddenfalls42/uxok/tree/main/examples).
 
 ## Install
 
@@ -94,10 +94,10 @@ Contributions welcome!
 
 ## The name
 
-The kernel was designed with a mashup of concepts and the name `uxok` spells that hybrid in miniature: `u` for micro, `xo` for exo and `k` for kernel, referencing the three borrowed architectures. By structure uxok is a microkernel, but its capability system follows the MIT exokernel `xok`'s discipline — *mechanism, not policy*, resources reached through secure bindings, abstraction pushed out into plugins. It stops short of the exokernel's hardware protection: plugins share one process and one trust domain. [Microkernel or exokernel?](explanation/architecture-overview.md#microkernel-or-exokernel) draws the line.
+The kernel was designed with a mashup of concepts and the name `uxok` spells that hybrid in miniature: `u` for micro, `xo` for exo and `k` for kernel, referencing the three borrowed architectures. By structure uxok is a microkernel, but its capability system follows the MIT exokernel `xok`'s discipline — *mechanism, not policy*, resources reached through secure bindings, abstraction pushed out into plugins. It stops short of the exokernel's hardware protection: plugins share one process and one trust domain. [Microkernel or exokernel?](https://hiddenfalls42.github.io/uxok/explanation/architecture-overview/#microkernel-or-exokernel) draws the line.
 
 The exokernel idea mostly lost in the OS world, but I think it has new life in the agentic era: the abstractions an agent needs aren't knowable in advance — which is exactly the problem exokernels were built for.
 
 ## License
 
-MIT — see [LICENSE](LICENSE)
+MIT — see [LICENSE](https://github.com/hiddenfalls42/uxok/blob/main/LICENSE)

@@ -1,12 +1,14 @@
 # uxok
 
-uxok is an async-first plugin microkernel for Python. It provides exactly five primitives — an event bus, a hook system, a plugin registry, a capability system, and a base `Plugin` class — and nothing else. Everything a host application does is implemented as plugins that declare what they provide and what they require; the kernel wires them together without any plugin knowing about another directly.
+uxok is an async-first hot-loading plugin microkernel for Python. It provides exactly five primitives — an event bus, a hook system, a plugin registry, a capability system, and a base `Plugin` class — and nothing else. Everything a host application does is implemented as plugins that declare what they provide and what they require; the kernel wires them together without any plugin knowing about another directly.
 
-Think of it like a Linux kernel: the kernel ships no applications, only the system calls that applications build on. uxok ships no features, only the calls that plugins build on. A plugin that disappears at runtime is replaced by a fresh one; the rest of the system keeps running because nothing held a direct reference to it.
+The kernel was designed with a mashup of concepts and the name `uxok` spells that hybrid in miniature: `u` for micro, `xo` for exo and `k` for kernel, referencing the three borrowed architectures. By structure uxok is a microkernel, but its capability system follows the MIT exokernel `xok`'s discipline — *mechanism, not policy*, resources reached through secure bindings, abstraction pushed out into plugins. It stops short of the exokernel's hardware protection: plugins share one process and one trust domain. [Microkernel or exokernel?](explanation/architecture-overview.md#microkernel-or-exokernel) draws the line. 
 
-The name points at a sharper lineage than "microkernel" alone. It spells that hybrid in miniature: `u` for micro — the stand-in convention behind uvloop and uWSGI — then `xo` for exo and `k` for kernel, three borrowed pieces in four typeable letters. By structure uxok is a microkernel, but its capability system follows the MIT exokernel's discipline — *mechanism, not policy*, resources reached through secure bindings, abstraction pushed out into plugins. It stops short of the exokernel's hardware protection: plugins share one process and one trust domain. [Microkernel or exokernel?](explanation/architecture-overview.md#microkernel-or-exokernel) draws the line.
+Beyond those primitives, the core keeps time: it runs a single monotonic clock — `core.tick` — that every plugin can read, and any event or hook can be deferred to a precise future tick with `emit(..., at_tick=...)`. See [The tick system](explanation/tick-system.md). *It is worth mentioning that python is python, so "precise" is a relative term.* 
 
-Beyond those primitives, the core keeps time: it runs a single monotonic clock — `core.tick` — that every plugin can read, and any event or hook can be deferred to a precise future tick with `emit(..., at_tick=...)`. See [The tick system](explanation/tick-system.md).
+All design decisions are made with one goal in mind: creating a reliable and easy to maintain kernel that reduces boilerplate needed to build decentralized agentic applications with self-coding capability. This project started with the intention of making myself a quick library to use, but I got hooked and couldn't stop until I had a full blown microkernel. 
+
+> uxok is a WIP and at this point experimental, especially the docs. If you spot some inconsistency or general nonsense, drop me an issue on github! 
 
 ## Quick start
 

@@ -17,8 +17,11 @@ import asyncio
 from uxok import Core, Plugin, event
 
 class GreeterPlugin(Plugin):
-    def __init__(self, core):
-        super().__init__(core, provides={"greeter"})
+    def __init__(self):
+        super().__init__(provides={"greeter"})
+
+    async def on_start(self):
+        await self.emit("greet.requested")
 
     @event("greet.requested")
     async def on_greet(self, ev):
@@ -27,7 +30,8 @@ class GreeterPlugin(Plugin):
 async def main():
     core = Core()
     await core.start()
-    await core.register_plugin(GreeterPlugin(core))
+    await core.register_plugin(GreeterPlugin())
+    await asyncio.sleep(0.1)  # let the fire-and-forget event dispatch
     await core.stop()
 
 asyncio.run(main())

@@ -2,6 +2,14 @@
 
 <!-- One line per note added, updated, or removed. Format: YYYY-MM-DD | action | path — description -->
 
+2026-06-27 | updated | docs/index.md — fixed broken front-page quick-start: keyword-only coreless Plugin constructor (was the removed positional-core form, raised TypeError), and made it actually fire the handler by emitting greet.requested in on_start; verified runs
+2026-06-27 | added | docs/how-to/how-to-boot-a-plugin-graph-in-order.md — ordered registration (providers before consumers), build_host() factoring, and the wait_for_capability polling pattern for capabilities that arrive asynchronously; complete program verified
+2026-06-27 | added | docs/how-to/how-to-shut-down-gracefully.md — ShutdownHandler plugin trapping OS signals and the system.shutdown event, blocking main() until shutdown; assembled program verified
+2026-06-27 | updated | docs/how-to/how-to-work-with-capabilities.md — wove tags into the headline provider example (step 1) instead of only step 6, promoting tag-based selection
+2026-06-27 | updated | docs/manifests/KERNEL_ARCHITECTURE.md — Future Enhancements: removed the stale positional-`core` constructor and added a note that the section's API (versioned provides/requires, get_capability_info/list_capabilities/find_providers) is speculative and not the current surface
+2026-06-27 | updated | docs/how-to/how-to-boot-a-plugin-graph-in-order.md — auditor M-1/L-2: reframed step 3 as host-level polling before registering a `requires` consumer (dropped the conflated `resolves` clause; tightened the async-setup wording)
+2026-06-27 | updated | docs/how-to/index.md — promoted Capabilities to a dedicated top section grouping all six capability guides (was scattered across "Plugin development" and "Advanced features"); added the two new lifecycle guides; split out a Scheduling section
+
 2026-06-23 | updated | docs/tutorials/index.md — full regeneration of tutorials section-index page
 2026-06-23 | updated | docs/explanation/index.md — full regeneration of explanation section-index page
 2026-06-23 | updated | docs/how-to/index.md — full regeneration of how-to section-index page

@@ -12,13 +12,14 @@ class StoragePlugin(Plugin):
         super().__init__(
             name="storage",
             provides={"storage", "cache"},
+            tags={"local", "fast"},
         )
 
     async def save(self, key: str, value: object) -> None:
         ...
 ```
 
-A plugin can provide any number of capabilities.
+A plugin can provide any number of capabilities. The optional `tags` set describes *this* provider's runtime characteristics — consumers use them to choose among several providers of the same capability (step 6). Tagging providers from the start keeps that choice open later without changing any policy.
 
 ## 2. Declare what your plugin requires
 

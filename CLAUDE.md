@@ -42,8 +42,8 @@ pytest -m performance               # perf tests (deselected by default)
 
 # Lint / format / types — ZERO ruff violations enforced (rule set curated in pyproject.toml;
 # tests relax annotation pedantry). No per-change noqa without a reason comment.
-ruff check src tests plugins
-ruff format src tests plugins
+ruff check src tests examples
+ruff format src tests examples
 mypy src
 
 # Dev install
@@ -52,7 +52,7 @@ pip install -e .[dev]
 
 ## Kernel Architecture
 
-**The kernel is `src/uxok/` and nothing else.** Reference plugins under `plugins/` (e.g.
+**The kernel is `src/uxok/` and nothing else.** Example plugins under `examples/` (e.g.
 `example_host/`) are built *with* the kernel, not part of it. Dependency arrow points one
 way: plugins import the kernel, never the reverse. Enforced by
 `tests/test_imports.py::TestKernelBoundary`.
@@ -76,7 +76,7 @@ src/uxok/            THE KERNEL (nothing else is)
 ├── timing/          tick clock, gate, scheduler
 └── utils/           helpers, task manager, async primitives
 
-plugins/             committed reference plugins (e.g. example_host/)
+examples/            committed example plugins (e.g. example_host/)
 ```
 
 Full architecture: `docs/explanation/architecture-overview.md`.

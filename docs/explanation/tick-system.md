@@ -143,7 +143,7 @@ class HeartbeatPlugin(Plugin):
         await self.emit("heartbeat.tick", {}, at_tick=self.core.tick + self.INTERVAL)
 ```
 
-The `Sensor` in the reference `plugins/example_host/` uses exactly this pattern to emit
+The `Sensor` in the reference `examples/example_host/` uses exactly this pattern to emit
 a reading every interval.
 
 The same pattern works with `self.hook()`. The chain terminates naturally when the

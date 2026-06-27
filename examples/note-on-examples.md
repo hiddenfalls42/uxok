@@ -1,0 +1,1 @@
+The example host was made rapidly just to demonstrate some of the core functionality. It isn't great. Later examples that demonstrate other useful things like hotloading and capability resolution are planned when I have time, otherwise refer to the docs. 

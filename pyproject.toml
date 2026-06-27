@@ -75,13 +75,13 @@ where = ["src"]
 uxok = ["py.typed"]
 
 # Curated rule set (decision record #13): rules the project acts on, zero
-# violations enforced via `ruff check src tests plugins`.
-# Kernel (src/) and reference plugins (plugins/) are held to the full set;
+# violations enforced via `ruff check src tests examples`.
+# Kernel (src/) and example plugins (examples/) are held to the full set;
 # tests relax annotation/style pedantry.
 [tool.ruff]
 target-version = "py312"
 line-length = 100
-src = ["src", "tests", "plugins"]
+src = ["src", "tests", "examples"]
 
 [tool.ruff.lint]
 select = [

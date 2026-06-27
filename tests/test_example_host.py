@@ -16,8 +16,8 @@ import asyncio
 
 import pytest
 import pytest_asyncio
-from plugins.example_host import AlertFormat, AlertLog, Sensor, ShutdownHandler, Thresholds
-from plugins.example_host.host import build_host
+from examples.example_host import AlertFormat, AlertLog, Sensor, ShutdownHandler, Thresholds
+from examples.example_host.host import build_host
 
 from uxok import Core
 from uxok.protocols import Event

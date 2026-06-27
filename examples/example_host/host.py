@@ -17,7 +17,7 @@ the running program and the tested program never drift.
 
 Run it:
 
-    python -m plugins.example_host.host
+    python -m examples.example_host.host
 """
 
 from __future__ import annotations
@@ -26,11 +26,11 @@ import asyncio
 import logging
 import sys
 
-from plugins.example_host.alert_format import AlertFormat
-from plugins.example_host.alert_log import AlertLog
-from plugins.example_host.sensor import Sensor
-from plugins.example_host.shutdown import ShutdownHandler
-from plugins.example_host.thresholds import Thresholds
+from examples.example_host.alert_format import AlertFormat
+from examples.example_host.alert_log import AlertLog
+from examples.example_host.sensor import Sensor
+from examples.example_host.shutdown import ShutdownHandler
+from examples.example_host.thresholds import Thresholds
 from uxok import Core
 
 logger = logging.getLogger("example_host")

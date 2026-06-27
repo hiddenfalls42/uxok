@@ -2,8 +2,7 @@
 
 This is the head of the example pipeline. It shows three kernel primitives at once:
 
-1. **The tick system + self-rescheduling recurrence.** uxok has no ``every_ticks``
-   primitive on purpose (convention over configuration). Periodic work is built by a
+1. **The tick system + self-rescheduling recurrence.** Periodic work is built by a
    handler re-arming itself: ``emit("sensor.sample", at_tick=core.tick + interval)``.
    ``on_start`` fires the first sample; each sample schedules the next.
 2. **Event publishing.** Each sample emits a ``reading`` event onto the bus. The sensor

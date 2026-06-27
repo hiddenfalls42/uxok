@@ -8,9 +8,9 @@
 
 **A hot-loading microkernel for Python — minimal core, everything else is a plugin.**
 
-I made this python kernal for prototyping self-coding agentic applications that interface with physical components, but that is definitely not the only application for it. It started as an experiment with early agentic coding to make a simple library and evolved into a personal passion, and a lot of learning.
+I made this python kernel for prototyping self-coding agentic applications that interface with physical components, but it's not limited to that. It started as an experiment with early agentic coding to make a simple library and evolved into a personal passion and a lot of learning along the way.
 
-uxok (mu-xok) has a microkernel-style architecture while taking inspiration from some concepts from the 1990's exokernal project "xok", essential primitives for building extensible, self modifying agentic applications: event-driven communication, hook-based extension points, hot-loading plugins and lifecycle management, and capability-based dependency resolution. Everything beyond these core primitives is meant to be implemented as plugins.
+uxok (mu-xok) has a microkernel-style architecture, taking inspiration from the 1990's exokernel project "xok". The core provides only essential primitives for building extensible, self-modifying agentic applications: event-driven communication, hook-based extension points, hot-loading plugins with lifecycle management, and capability-based dependency resolution.
 
 ## Features
 
@@ -34,6 +34,7 @@ mypy src               # Type check
 ```
 
 There is no packaged release yet — install from source as above. A virtualenv is strongly recommended.
+
 ## Documentation
 
 **Build locally:**
@@ -41,13 +42,14 @@ There is no packaged release yet — install from source as above. A virtualenv 
 pip install -e ".[docs]"
 mkdocs build --strict  # Output in ./site/
 ```
-`mkdocs build` writes the static site to `./site/`; use `mkdocs serve` to preview it live at a local address.
+Use `mkdocs serve` to preview the site live instead of building it.
 
 Full docs include tutorials, how-to guides, architecture deep-dives, and API reference.
 
 ## Contributing
 
 Contributions welcome! 
+
 ## License
 
 MIT — see [LICENSE](LICENSE)

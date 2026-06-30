@@ -6,9 +6,9 @@ The kernel was designed with a mashup of concepts and the name `uxok` spells tha
 
 Beyond those primitives, the core keeps time: it runs a single monotonic clock — `core.tick` — that every plugin can read, and any event or hook can be deferred to a precise future tick with `emit(..., at_tick=...)`. See [The tick system](explanation/tick-system.md). *It is worth mentioning that python is python, so "precise" is a relative term.* 
 
-All design decisions are made with one goal in mind: creating a reliable and easy to maintain kernel that reduces boilerplate needed to build decentralized agentic applications with self-coding capability. This project started with the intention of making myself a quick library to use, but I got hooked and couldn't stop until I had a full blown microkernel. 
+All design decisions are made with one goal in mind: creating a reliable and easy to maintain kernel that reduces boilerplate needed to build decentralized agentic applications with self-modifying ability. This project started with the intention of making myself a quick library to use, but I got hooked and couldn't stop until I had a full blown microkernel. 
 
-> uxok is a WIP and at this point experimental, especially the docs. If you spot some inconsistency or general nonsense, drop me an issue on github! 
+> uxok is a WIP, especially the docs. If you spot some inconsistency or general nonsense, please drop me an [issue](https://github.com/hiddenfalls42/uxok/issues) on github and feel free to contribute! 
 
 ## Quick start
 

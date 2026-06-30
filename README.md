@@ -20,11 +20,9 @@ pip install git+https://github.com/hiddenfalls42/uxok.git
 ```
 
 ## Quick start
-Basic functionality in a single script. The same conversation as a proper modular host — one plugin per file, with a plugin hot-reloaded live — is in [`examples/example_host/`](https://github.com/hiddenfalls42/uxok/tree/main/examples/example_host) (run it with `python -m examples.example_host.host`). 
+Basic functionality in a single script. The same example as a proper modular host — one plugin per file, with a plugin hot-reloaded live — is in [`examples/example_host/`](https://github.com/hiddenfalls42/uxok/tree/main/examples/example_host).
 
 ```python
-# In a real program, write each plugin as its own file/module. This script is compacted for the sake of the README.
-
 import asyncio
 from uxok import Core, Plugin, event, hook
 

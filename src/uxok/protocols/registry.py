@@ -115,40 +115,6 @@ class Registry(Protocol):
         """
         ...
 
-    async def block(self, identifier: str) -> None:
-        """Block plugin from registration.
-
-        Thread-safe operation that acquires write lock.
-
-        Args:
-            identifier: PluginProtocol name or ID to block
-        """
-        ...
-
-    async def unblock(self, identifier: str) -> bool:
-        """Unblock plugin.
-
-        Thread-safe operation that acquires write lock.
-
-        Args:
-            identifier: PluginProtocol name or ID to unblock
-
-        Returns:
-            True if plugin was blocked
-        """
-        ...
-
-    def is_blocked(self, identifier: str) -> bool:
-        """Check if plugin is blocked.
-
-        Args:
-            identifier: PluginProtocol name or ID to check
-
-        Returns:
-            True if plugin is blocked
-        """
-        ...
-
     async def swap_instance(
         self,
         plugin_id: PluginId,

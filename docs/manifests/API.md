@@ -126,7 +126,6 @@ happens in `CoreConfig.__post_init__`. Any kwarg not a `CoreConfig` field raises
 | kwarg | Type | Default |
 |---|---|---|
 | `max_plugins` | `int` | `100` |
-| `blocked_plugins` | `frozenset[str]` | `frozenset()` |
 | `hook_precaching` | `str` | `"on_core_start"` |
 | `capability_collision` | `str` | `"last_wins_with_warning"` |
 | `capability_selection` | `str` | `"last_registered"` |
@@ -147,7 +146,7 @@ See [§7.3 CoreConfig](#73-coreconfig) for the accepted enum values and numeric 
 |---|---|---|---|
 | `start` | `async def start(self) -> None` | `None` | `CoreError` if not INITIALIZED |
 | `stop` | `async def stop(self) -> None` | `None` | `CoreError` if not in a stoppable state |
-| `register_plugin` | `async def register_plugin(self, plugin: PluginProtocol) -> bool` | `True` if registered, `False` if blocked | `PluginError`, `MissingCapabilityError` |
+| `register_plugin` | `async def register_plugin(self, plugin: PluginProtocol) -> bool` | `True` if registered | `PluginError`, `MissingCapabilityError` |
 | `check_plugin` | `async def check_plugin(self, candidate: PluginProtocol) -> AdmissionResult` | `AdmissionResult` (advisory; never raises) | — |
 | `unregister_plugin` | `async def unregister_plugin(self, plugin_id: UUID \| str, *, force: bool = False) -> bool` | `False` if not found | `PluginError` (active-operation or dependents present) |
 | `load_plugin` | `async def load_plugin(self, code: str, origin: str \| None = None) -> bool` | `True` if loaded or reloaded | `PluginError` (compile failure or 0 or >1 Plugin subclass found) |
@@ -184,9 +183,9 @@ Notes:
   commit (so a probe that passed can still be rejected at commit if the graph drifted). The
   two paths share one routine, so they cannot disagree. **Scope — a clean verdict means
   "fits the graph now," not "commit will succeed":** `AdmissionResult` models exactly four
-  faults; `register_plugin` can still reject at commit for a **name** conflict (distinct from
-  the modeled *id* conflict), `max_plugins`, a blocked-plugin name, or a declared/circular
-  dependency fault, none of which admission models. Separately, admission certifies the
+  faults;   `register_plugin` can still reject at commit for a **name** conflict (distinct from
+  the modeled *id* conflict), `max_plugins`, or a declared/circular dependency fault,
+  none of which admission models. Separately, admission certifies the
   *declared* manifest, not that it is *complete* for what the body resolves at runtime — under
   RFC 0002 `resolves` is deliberately not registration-validated, so an under-declared
   `resolves` admits cleanly here and fails later as `CapabilityAccessError`. **Reachable
@@ -595,7 +594,6 @@ Full field list with accepted enum values and numeric bounds:
 | Field | Type | Default | Accepted values / bounds |
 |---|---|---|---|
 | `max_plugins` | `int` | `100` | Positive integer |
-| `blocked_plugins` | `frozenset[str]` | `frozenset()` | `frozenset` of identifier strings |
 | `hook_precaching` | `str` | `"on_core_start"` | `"disabled"`, `"on_core_start"` |
 | `capability_collision` | `str` | `"last_wins_with_warning"` | `"error_on_conflict"`, `"first_wins"`, `"last_wins_with_warning"` |
 | `capability_selection` | `str` | `"last_registered"` | `"first_registered"`, `"last_registered"` |
@@ -1176,6 +1174,8 @@ in step 6 is signalled but does not roll back.
 | `CoreConfig.tick_operation_timeout` | **Removed** | Serial gate is gone; timeouts are a plugin concern (compare `current_tick − fired_at_tick`) |
 | `CoreConfig.tick_queue_max_size` | **Removed** | Serial gate queue is gone; no dispatch queue exists |
 | `CoreConfig.tick_queue_overflow` | **Removed** | Serial gate queue is gone; no dispatch queue exists |
+| `CoreConfig.blocked_plugins` | **Removed** | No kernel-level plugin blocklist; hosts enforce admission policy before calling `register_plugin()` |
+| `Registry.block` / `unblock` / `is_blocked` | **Removed** | No kernel-level plugin blocklist; hosts enforce admission policy before calling `register_plugin()` |
 
 Zero backward compatibility on all removed names. `on` is completely gone; code
 using `@on(...)` or `from uxok import on` raises `ImportError`. `CoreConfig`

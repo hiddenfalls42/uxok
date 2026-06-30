@@ -29,7 +29,6 @@ __all__ = [
     "Plugin",
     "PluginError",
     "StalePluginError",
-    "__version__",
     "event",
     "hook",
 ]

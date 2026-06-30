@@ -25,7 +25,6 @@ class _Registry:
     Features:
     - Simple dictionary-based storage
     - Dependency validation
-    - Plugin blocking/unblocking
     - Basic dependency resolution
     """
 
@@ -45,9 +44,6 @@ class _Registry:
 
         # Reverse dependency tracking (plugin_id -> set of dependent IDs)
         self._dependents: dict[PluginId, set[PluginId]] = {}
-
-        # Blocked plugins (runtime blocking)
-        self._blocked_plugins: set[str] = set()
 
         # INVARIANT (lock-free by design): every read-modify-write of registry
         # state is a synchronous critical section — no await may appear inside
@@ -75,14 +71,6 @@ class _Registry:
 
         plugin_id = plugin.metadata.id
         plugin_name = plugin.metadata.name
-
-        # Check if plugin is blocked
-        if self.is_blocked(plugin_name) or self.is_blocked(str(plugin_id)):
-            logger.warning(
-                "Plugin blocked, refusing registration",
-                extra=log_op("registry.blocked", plugin_id=str(plugin_id), plugin_name=plugin_name),
-            )
-            return False
 
         # Check if plugin already exists
         if plugin_id in self._plugins:
@@ -310,45 +298,6 @@ class _Registry:
             Dictionary of all plugins (ID -> plugin)
         """
         return self._plugins.copy()
-
-    async def block(self, identifier: str) -> None:
-        """Block plugin from registration.
-
-        Thread-safe operation that acquires write lock.
-
-        Args:
-            identifier: Plugin name or ID to block
-        """
-        self._blocked_plugins.add(identifier)
-        logger.debug("Blocked plugin", extra={"identifier": identifier})
-
-    async def unblock(self, identifier: str) -> bool:
-        """Unblock plugin.
-
-        Thread-safe operation that acquires write lock.
-
-        Args:
-            identifier: Plugin name or ID to unblock
-
-        Returns:
-            True if was blocked, False if wasn't blocked
-        """
-        if identifier in self._blocked_plugins:
-            self._blocked_plugins.remove(identifier)
-            logger.debug("Unblocked plugin", extra={"identifier": identifier})
-            return True
-        return False
-
-    def is_blocked(self, identifier: str) -> bool:
-        """Check if plugin is blocked.
-
-        Args:
-            identifier: Plugin name or ID to check
-
-        Returns:
-            True if blocked, False otherwise
-        """
-        return identifier in self._blocked_plugins
 
     # ========== Internal methods for framework use ==========
 

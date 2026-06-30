@@ -108,6 +108,11 @@ commit as its CHANGELOG entry.
   event-system, hook-system, and plugin-architecture explanations.
 
 ### Removed
+- **Breaking (pre-1.0):** removed the `blocked_plugins` config field and the
+  `Registry.block()`/`unblock()`/`is_blocked()` methods. There is no longer a kernel-level
+  plugin blocklist. Hosts must enforce admission policy before calling `register_plugin()`.
+  Note: `register_plugin` no longer returns `False` on a blocked name — that return path is
+  gone entirely; it returns `True` or raises.
 - **Breaking (pre-1.0):** the invocation surface of plugin discovery (RFC 0001 §3.2.2):
   `PluginView.call`, `PluginView.get_object`, and the `PluginCollection` fan-outs built on
   them (`call_method_on_all`, `start_all`, `stop_all`). A `PluginView` is now a description,

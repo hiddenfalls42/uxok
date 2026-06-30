@@ -91,7 +91,7 @@ class Core(Protocol):
         act. For the guarantee, call :meth:`register_plugin` — the same admission
         runs atomically under the lock at commit. A clean verdict means the
         candidate fits the graph now, not that commit will succeed: name conflicts,
-        ``max_plugins``, blocked names, and dependency-graph faults are enforced
+        ``max_plugins``, and dependency-graph faults are enforced
         only at commit, and ``resolves`` completeness is never registration-checked.
         """
         ...

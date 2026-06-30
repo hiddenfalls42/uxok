@@ -141,12 +141,6 @@ class Core(CoreProtocol):
         # multi-step operations that span awaits.
         self._lifecycle_lock: _ReentrantLock = _ReentrantLock()
 
-        # Apply blocked plugins from config BEFORE any concurrent access
-        # This is safe because we're in __init__ before the core is exposed to concurrent use
-        for plugin_name in self._core_config.blocked_plugins:
-            self._registry._blocked_plugins.add(plugin_name)  # Direct access during init
-            logger.info(f"Blocked plugin from config: {plugin_name}")
-
         # Capability system
         self._capability_system = CapabilitySystem(
             CapabilityPolicy(
@@ -234,7 +228,7 @@ class Core(CoreProtocol):
             plugin: The plugin to register
 
         Returns:
-            True if registered successfully, False if blocked
+            True if registered successfully
 
         Raises:
             PluginError: If registration fails
@@ -301,7 +295,7 @@ class Core(CoreProtocol):
 
         - **Commit-only registry gates.** ``registry.add`` still rejects at commit
           for a **name** conflict (distinct from the modeled *id* conflict),
-          ``max_plugins``, a blocked-plugin name, or a declared/circular dependency
+          ``max_plugins``, or a declared/circular dependency
           fault. These are not modeled here, so a candidate clean on the four
           admission faults can still fail commit.
         - **Authority completeness.** Admission certifies the *declared* manifest,

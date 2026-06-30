@@ -17,7 +17,6 @@ class CoreConfig:
     Attributes:
         max_plugins: Maximum number of plugins, enforced by the registry at
             registration time.
-        blocked_plugins: Plugin names refused at registration.
         hook_precaching: Hook precaching mode — ``"disabled"`` or
             ``"on_core_start"``.
         capability_collision: Policy when two plugins provide the same
@@ -41,9 +40,6 @@ class CoreConfig:
 
     # Plugin limits (enforced by the registry at registration time)
     max_plugins: int = 100
-
-    # Plugin blocking
-    blocked_plugins: frozenset[str] = frozenset()
 
     # Hook system configuration
     hook_precaching: str = "on_core_start"  # "disabled", "on_core_start"

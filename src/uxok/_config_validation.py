@@ -27,17 +27,6 @@ def _validate_hook_config(config: CoreConfig) -> None:
     )
 
 
-def _validate_plugin_config(config: CoreConfig) -> None:
-    """Validate plugin configuration fields."""
-    # Validate blocked_plugins
-    if not isinstance(config.blocked_plugins, frozenset):
-        raise ValueError("blocked_plugins must be a frozenset")
-
-    # Validate each entry in blocked_plugins is a string
-    for plugin_name in config.blocked_plugins:
-        validate_identifier(plugin_name, "blocked_plugin")
-
-
 def _validate_capability_config(config: CoreConfig) -> None:
     """Validate capability system configuration fields."""
     validate_enum_value(
@@ -101,6 +90,5 @@ def validate_core_config(config: CoreConfig) -> None:
     """
     _validate_basic_values(config)
     _validate_hook_config(config)
-    _validate_plugin_config(config)
     _validate_capability_config(config)
     _validate_timing_config(config)

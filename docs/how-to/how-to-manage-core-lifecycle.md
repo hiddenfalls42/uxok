@@ -137,7 +137,6 @@ core = Core(
     max_plugins=50,
     tick_rate=100,          # Hz; lower for CPU-light workloads
     hook_precaching="disabled",
-    blocked_plugins=frozenset({"legacy_plugin"}),
 )
 ```
 

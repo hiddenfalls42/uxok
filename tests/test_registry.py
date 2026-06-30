@@ -1,4 +1,4 @@
-"""Tests for the plugin registry: add/remove, blocking, dependencies, and load ordering."""
+"""Tests for the plugin registry: add/remove, dependencies, and load ordering."""
 
 from __future__ import annotations
 
@@ -16,31 +16,6 @@ from uxok.registry.impl import _Registry
 @pytest_asyncio.fixture
 async def registry():
     return _Registry()
-
-
-# =============================================================================
-# Blocking
-# =============================================================================
-
-
-class TestRegistryBlocking:
-    @pytest.mark.asyncio
-    async def test_block_prevents_registration(self, registry, clean_core: Core):
-        await registry.block("test_plugin")
-        assert registry.is_blocked("test_plugin")
-
-        p = Plugin(name="test_plugin")
-        assert await registry.add(p) is False
-
-    @pytest.mark.asyncio
-    async def test_unblock(self, registry):
-        await registry.block("test_plugin")
-        assert await registry.unblock("test_plugin") is True
-        assert not registry.is_blocked("test_plugin")
-
-    @pytest.mark.asyncio
-    async def test_unblock_not_blocked_returns_false(self, registry):
-        assert await registry.unblock("never_blocked") is False
 
 
 # =============================================================================

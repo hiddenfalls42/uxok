@@ -324,6 +324,13 @@ class TestRemovedApiAbsent:
         with pytest.raises(ImportError):
             exec("from uxok import on")  # noqa: S102 — import-surface probe
 
+    def test_blocked_plugins_kwarg_rejected_after_removal(self) -> None:
+        """Regression: ``blocked_plugins`` config field was removed; passing it must fail fast."""
+        from uxok import Core
+
+        with pytest.raises(TypeError):
+            Core(blocked_plugins=frozenset({"legacy"}))
+
 
 # ---------------------------------------------------------------------------
 # Section-scoped parse helpers (§7.x and §10.3)

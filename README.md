@@ -7,7 +7,7 @@
 
 > **Status: 0.x, pre-1.0.** Functional and well-tested, but the public API is still settling and may change between releases. If you build on it now, pin to a commit and expect to adjust on upgrade.
 
-**A hot-loading plugin microkernel for Python — minimal core, everything else is a plugin.**
+**A hot-loading plugin microkernel for building self-modifying agentic systems in Python.**
 
 Read the [docs](https://hiddenfalls42.github.io/uxok/) to learn more! 
 > The docs are a WIP but I will be updating them actively: if you notice something off with them (or the code), please drop me an [issue](https://github.com/hiddenfalls42/uxok/issues).
@@ -20,10 +20,10 @@ pip install git+https://github.com/hiddenfalls42/uxok.git
 ```
 
 ## Quick start
-basic functionality in a single script. 
+Basic functionality in a single script. The same conversation as a proper modular host — one plugin per file, with a plugin hot-reloaded live — is in [`examples/example_host/`](https://github.com/hiddenfalls42/uxok/tree/main/examples/example_host) (run it with `python -m examples.example_host.host`). 
 
 ```python
-# In a real program, write each plugin as its own file/module. This example is compacted for the sake of the README. See docs for full examples.
+# In a real program, write each plugin as its own file/module. This script is compacted for the sake of the README.
 
 import asyncio
 from uxok import Core, Plugin, event, hook
@@ -87,9 +87,6 @@ asyncio.run(main())
 - [**Type Safety**](https://hiddenfalls42.github.io/uxok/explanation/architecture-overview/) — Full protocol-based typing with mypy support
 
 uxok has a microkernel-style architecture: the core provides only essential primitives for building extensible, self-modifying agentic applications — event-driven communication, hook-based extension points, hot-loading plugins with lifecycle management, and capability-based dependency resolution. Everything else is a plugin you can add, remove, or swap at runtime.
-
-Reach for it when you need plugins you can swap *while the process is running*, not just load once at startup. A complete multi-plugin host lives in [`examples/`](https://github.com/hiddenfalls42/uxok/tree/main/examples).
-
 
 ## Development 
 

@@ -7,65 +7,89 @@
 
 > **Status: 0.x, pre-1.0.** Functional and well-tested, but the public API is still settling and may change between releases. If you build on it now, pin to a commit and expect to adjust on upgrade.
 
-**A hot-loading microkernel for Python — minimal core, everything else is a plugin.**
+**A hot-loading plugin microkernel for Python — minimal core, everything else is a plugin.**
 
-```python
-import asyncio
-from uxok import Core, Plugin
+Read the [docs](https://hiddenfalls42.github.io/uxok/) to learn more! 
+> The docs are a WIP but I will be updating them actively: if you notice something off with them (or the code), please drop me an [issue](https://github.com/hiddenfalls42/uxok/issues).
 
-# A plugin that PROVIDES a capability — a named service the kernel hands out.
-class Model(Plugin):
-    def __init__(self):
-        super().__init__(name="model", provides={"llm"})
-
-    async def complete(self, prompt):
-        return f"(response to: {prompt})"
-
-# A plugin that REQUIRES "llm" — it never imports Model, it asks the kernel.
-class Agent(Plugin):
-    def __init__(self):
-        super().__init__(name="agent", requires={"llm"})
-
-    async def on_start(self):
-        llm = await self.core.get_capability("llm")  # kernel resolves the wiring by name
-        print(await llm.complete("plan my day"))     # swap the model at runtime; the agent is unchanged
-
-async def main():
-    async with Core() as core:                # the host
-        await core.register_plugin(Model())   # provider registers first
-        await core.register_plugin(Agent())   # on_start resolves "llm" and runs
-
-asyncio.run(main())
-```
-
-That `provides`/`requires`/`get_capability` loop is what sets uxok apart: plugins are wired by name, never by import, so any provider can be hot-swapped underneath its consumers while the process runs. There's real depth behind each piece — the [documentation](https://hiddenfalls42.github.io/uxok/) covers it with tutorials, how-to guides, architecture deep-dives, and a generated API reference.
-
-I made this python kernel for prototyping self-coding agentic applications that interface with physical components, but it's not limited to that. It started as an experiment with early agentic coding to make a simple library and evolved into a personal passion — and into something that actually works. It's been built with AI from the start, Claude 3.5 onward — an exercise in using it to do more right, not more fast.
-
-## How it works
-
-uxok has a microkernel-style architecture: the core provides only essential primitives for building extensible, self-modifying agentic applications — event-driven communication, hook-based extension points, hot-loading plugins with lifecycle management, and capability-based dependency resolution. Everything else is a plugin you can add, remove, or swap at runtime.
-
-Reach for it when you need plugins you can swap *while the process is running*, not just load once at startup. A complete multi-plugin host lives in [`examples/`](https://github.com/hiddenfalls42/uxok/tree/main/examples).
-
-## Install
-
+## Installation
 Not on PyPI yet — install from the repo:
 
 ```bash
 pip install git+https://github.com/hiddenfalls42/uxok.git
 ```
 
-A virtualenv is strongly recommended.
+## Quick start
+basic functionality in a single script. 
+
+```python
+# In a real program, write each plugin as its own file/module. This example is compacted for the sake of the README. See docs for full examples.
+
+import asyncio
+from uxok import Core, Plugin, event, hook
+
+# Plugins are declared by subclassing `Plugin` and defining their name and what they provide in the capability metadata. 
+class Model(Plugin):
+    def __init__(self):
+        super().__init__(name="model", provides={"llm"})
+
+    # Methods are async so that other plugins can call them at random through capabilities.
+    async def reply(self, text, persona):
+        return f"{persona} you said '{text}'."
+
+    # Hooks are set using a decorator and can be triggered by any plugin. 
+    @hook("persona")
+    async def voice(self):
+        return "Cheerfully:"
+
+# Other plugins can declare dependencies on other plugins' capabilities with "requires=". This builds a dependency graph, and tells the core which parts of itself to hand the plugin (a "core faucet"). 
+class Agent(Plugin):
+    def __init__(self, done):
+        super().__init__(name="agent", requires={"llm"})
+        self.lines = ["hello there", "what's the weather like?"]
+        self.done = done
+    
+    # Capabilities can then be acquired from the "core faucet" object. 
+    async def on_start(self):
+        self.llm = await self.core.get_capability("llm")  # kernel wires it up
+        await self.emit("turn")
+
+    # Events are subscribed to in the same fashion as hooks. 
+    @event("turn")
+    async def speak(self, ev):
+        if not self.lines:
+            self.done.set()
+            return
+        line = self.lines.pop(0)
+        persona = await self.hook("persona", firstresult=True)
+        print(f"user:  {line}")
+        print(f"agent: {await self.llm.reply(line, persona)}")
+        await self.emit("turn")
+
+# The main program just opens a core and loads plugins onto it; registration order matters, providers first.
+async def main():
+    done = asyncio.Event()
+    async with Core() as core:                # async context manager starts/stops the kernel
+        await core.register_plugin(Model())   # provider first
+        await core.register_plugin(Agent(done))
+        await done.wait()
+
+asyncio.run(main())
+```
 
 ## Features
 
-- **Hot-Loading** — Add/remove/replace plugins at runtime without restart
-- **Event-Driven** — Non-blocking pub/sub messaging for loose coupling
-- **Hook System** — Priority-based extension points for pipelines
-- **Capability System** — Kernel-style dependency resolution with tag-based selection
-- **Frozen records** — Protocols and event/hook payloads are immutable at runtime; behavior changes by hot-swapping plugins, not by mutating live objects
-- **Type Safety** — Full protocol-based typing with mypy support
+- [**Hot-Loading**](https://hiddenfalls42.github.io/uxok/how-to/how-to-use-hot-reload/) — Add/remove/replace plugins at runtime without restart
+- [**Capability System**](https://hiddenfalls42.github.io/uxok/explanation/capability-system/) — Kernel-style dependency resolution with tag-based selection
+- [**Event-Driven**](https://hiddenfalls42.github.io/uxok/explanation/event-system/) — Non-blocking pub/sub messaging for loose coupling
+- [**Hook System**](https://hiddenfalls42.github.io/uxok/explanation/hook-system/) — Priority-based extension points for pipelines
+- [**Introspectable**](https://hiddenfalls42.github.io/uxok/how-to/how-to-use-plugin-collections/) — Query the live plugin graph at runtime: filter by capability, hook, event, or status
+- [**Type Safety**](https://hiddenfalls42.github.io/uxok/explanation/architecture-overview/) — Full protocol-based typing with mypy support
+
+uxok has a microkernel-style architecture: the core provides only essential primitives for building extensible, self-modifying agentic applications — event-driven communication, hook-based extension points, hot-loading plugins with lifecycle management, and capability-based dependency resolution. Everything else is a plugin you can add, remove, or swap at runtime.
+
+Reach for it when you need plugins you can swap *while the process is running*, not just load once at startup. A complete multi-plugin host lives in [`examples/`](https://github.com/hiddenfalls42/uxok/tree/main/examples).
+
 
 ## Development 
 
@@ -79,24 +103,10 @@ ruff check src tests examples  # Lint
 mypy src                     # Type check
 ```
 
-## Documentation
-
-**Build locally:**
-```bash
-pip install -e ".[docs]"
-mkdocs build --strict  # Output in ./site/
-```
-Use `mkdocs serve` to preview the site live instead of building it. The published docs live at <https://hiddenfalls42.github.io/uxok/>.
-
 ## Contributing
 
 Contributions welcome! 
 
-## The name
-
-The kernel was designed with a mashup of concepts and the name `uxok` spells that hybrid in miniature: `u` for micro, `xo` for exo and `k` for kernel, referencing the three borrowed architectures. By structure uxok is a microkernel, but its capability system follows the MIT exokernel `xok`'s discipline — *mechanism, not policy*, resources reached through secure bindings, abstraction pushed out into plugins. It stops short of the exokernel's hardware protection: plugins share one process and one trust domain. [Microkernel or exokernel?](https://hiddenfalls42.github.io/uxok/explanation/architecture-overview/#microkernel-or-exokernel) draws the line.
-
-The exokernel idea mostly lost in the OS world, but I think it has new life in the agentic era: the abstractions an agent needs aren't knowable in advance — which is exactly the problem exokernels were built for.
 
 ## License
 

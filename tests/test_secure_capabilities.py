@@ -172,7 +172,7 @@ class TestDeclaredMode:
         """Discovery is ambient on the facet (RFC 0001 §3.2.2): a plugin can enumerate
         the graph under enforcement without any grant, and the views it gets back are
         descriptive-only — no backdoor to invoking another plugin."""
-        from uxok.registry._plugin_proxy import PluginCollection
+        from uxok.registry._plugin_view import PluginCollection
 
         core, _a, _b, c = await _build(mode)  # Consumer declares no kernel.lifecycle grant
         try:

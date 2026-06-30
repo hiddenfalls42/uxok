@@ -36,7 +36,7 @@ from uxok.timing._clock import TickClock
 from uxok.timing._scheduler import TickScheduler
 
 if TYPE_CHECKING:
-    from uxok.registry._plugin_proxy import PluginCollection
+    from uxok.registry._plugin_view import PluginCollection
 
 from uxok.protocols.events import Event
 from uxok.registry._plugin_collection_service import PluginCollectionService

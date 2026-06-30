@@ -46,7 +46,7 @@ if TYPE_CHECKING:
     from uxok.protocols import AdmissionResult, CoreConfig, CoreState
     from uxok.protocols.events import EventBus
     from uxok.protocols.hooks import HookSystem
-    from uxok.registry._plugin_proxy import PluginCollection
+    from uxok.registry._plugin_view import PluginCollection
 
 
 def enforce_requires(capability: str | type, owner: Plugin, mode: str) -> str:

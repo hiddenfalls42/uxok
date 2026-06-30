@@ -6,7 +6,7 @@ import asyncio
 import weakref
 from typing import TYPE_CHECKING, Any
 
-from uxok.registry._plugin_proxy import CapabilityInfo, PluginCollection, PluginView
+from uxok.registry._plugin_view import CapabilityInfo, PluginCollection, PluginView
 
 if TYPE_CHECKING:
     from uxok.protocols import PluginProtocol

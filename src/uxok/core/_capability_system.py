@@ -12,7 +12,7 @@ from uxok.core._shared_utils import (
     log_op,
 )
 from uxok.errors import CapabilityAccessError, MissingCapabilityError, PluginError
-from uxok.registry._plugin_proxy import CapabilityInfo
+from uxok.registry._plugin_view import CapabilityInfo
 from uxok.utils import derive_capability_name, get_protocol_methods
 from uxok.utils._capability_utils import signature_incompatibility
 

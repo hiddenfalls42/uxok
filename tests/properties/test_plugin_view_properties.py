@@ -14,7 +14,7 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 from uxok import Core, Plugin
-from uxok.registry._plugin_proxy import PluginView
+from uxok.registry._plugin_view import PluginView
 
 if TYPE_CHECKING:
     from uxok import Core
@@ -325,7 +325,7 @@ class TestPluginViewPropertyBased:
             for i in range(collection_size)
         ]
 
-        from uxok.registry._plugin_proxy import PluginCollection
+        from uxok.registry._plugin_view import PluginCollection
 
         collection = PluginCollection(views)
 
@@ -694,7 +694,7 @@ class TestProxyHonesty:
 
         # A never-started instance reports "created".
         unstarted = LifecyclePlugin.__new__(LifecyclePlugin)
-        from uxok.registry._plugin_proxy import _plugin_status_from_instance
+        from uxok.registry._plugin_view import _plugin_status_from_instance
 
         assert _plugin_status_from_instance(unstarted) == "created"
 
@@ -793,7 +793,7 @@ class TestFilterProxySlowPath:
         )
 
     def test_slow_path_provides_and_consumes(self):
-        from uxok.registry._plugin_proxy import PluginCollection
+        from uxok.registry._plugin_view import PluginCollection
 
         views = [
             self._view(0, provides={"cap"}, hooks_provided=["h"], events_published=["e"]),

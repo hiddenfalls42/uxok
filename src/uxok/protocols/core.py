@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from uxok.protocols.events import EventBus
     from uxok.protocols.hooks import HookSystem
     from uxok.protocols.plugin import PluginProtocol
-    from uxok.registry._plugin_proxy import PluginCollection
+    from uxok.registry._plugin_view import PluginCollection
 
 
 @dataclass(frozen=True)

@@ -152,7 +152,7 @@ See [§7.3 CoreConfig](#73-coreconfig) for the accepted enum values and numeric 
 | `unregister_plugin` | `async def unregister_plugin(self, plugin_id: UUID \| str, *, force: bool = False) -> bool` | `False` if not found | `PluginError` (active-operation or dependents present) |
 | `load_plugin` | `async def load_plugin(self, code: str, origin: str \| None = None) -> bool` | `True` if loaded or reloaded | `PluginError` (compile failure or 0 or >1 Plugin subclass found) |
 | `get_plugin` | `async def get_plugin(self, plugin_id: UUID \| str) -> PluginProtocol \| None` | live instance or `None` | — |
-| `list` | `async def list(self) -> PluginCollection` | `PluginCollection` — the single discovery surface (plugins **and** capabilities; see [§10](#10-plugincollection-and-pluginproxy)) | — |
+| `list` | `async def list(self) -> PluginCollection` | `PluginCollection` — the single discovery surface (plugins **and** capabilities; see [§10](#10-plugincollection-and-pluginview)) | — |
 | `get_capability` | `async def get_capability(self, capability: str \| type, *, tag: str \| None = None) -> Any` | provider | `CapabilityError` if unavailable; `PluginError` if provider fails protocol contract |
 | `__aenter__` | `async def __aenter__(self) -> Core` | `self` after `start()` | as `start()` |
 | `__aexit__` | `async def __aexit__(self, exc_type, exc_val, exc_tb) -> None` | `None` | as `stop()` |
@@ -767,7 +767,7 @@ from uxok.registry import CapabilityInfo, PluginCollection, PluginView
 
 ### 10.1 PluginView
 
-`@dataclass` — `src/uxok/registry/_plugin_proxy.py`.
+`@dataclass` — `src/uxok/registry/_plugin_view.py`.
 A descriptive snapshot — a description, not a handle. It exposes no way to invoke a method
 on, or hand back, the live instance (RFC 0001 §3.2.2: discovery must not be a backdoor to
 invocation). To act on a plugin, resolve it through the `kernel.lifecycle` grant
@@ -816,7 +816,7 @@ the registry (i.e. the live read) as authoritative if the two ever disagree.
 
 ### 10.2 PluginCollection
 
-`src/uxok/registry/_plugin_proxy.py`.
+`src/uxok/registry/_plugin_view.py`.
 
 Constructor: `PluginCollection(plugins: list[PluginView], *, build_indexes: bool = True, capability_info: dict[str, CapabilityInfo] | None = None)`.
 The keyword arguments are internal construction details; a collection is normally
@@ -855,7 +855,7 @@ Example DSL: `plugins.capability.provides("storage")`, `plugins.hook.consumes("d
 
 ### 10.3 CapabilityInfo
 
-`@dataclass(frozen=True)` — `src/uxok/registry/_plugin_proxy.py`.
+`@dataclass(frozen=True)` — `src/uxok/registry/_plugin_view.py`.
 Typed result for capability-protocol introspection. Returned by
 `collection.capability.info(name)`.
 

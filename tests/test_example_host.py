@@ -1,33 +1,35 @@
-"""Example host: the sensor/alerting reference graph built purely on kernel primitives.
+"""Example host: the conversational-agent reference graph on kernel primitives.
 
-This suite is also the acceptance test for the example: every kernel primitive the host
-demonstrates is exercised here — the event bus (reading → alert), the hook extension point
-(format_alert), the capability surface (get_capability), state continuity
-(get_state/restore_state), and graceful shutdown (system.shutdown). The whole suite runs
-under both ``capability_access="open"`` and ``"declared"`` so the graph is proven under the
-enforced secure-capability mode, not just the permissive one.
+This suite is also the acceptance test for the example: every kernel feature the
+host demonstrates is exercised here — the event bus (``user.says`` → ``agent.says``),
+the hook extension point (``persona``), the capability surface (``get_capability``),
+ordered boot (``build_host``), hot reload
+(``core.load_plugin`` swapping the persona), and graceful shutdown
+(``system.shutdown``). The whole suite runs under both ``capability_access="open"``
+and ``"declared"`` so the graph is proven under the enforced secure-capability
+mode, not just the permissive one.
 
-The pipeline is driven by publishing ``reading`` events directly rather than waiting on the
-tick clock, so assertions are deterministic. The Sensor's own tick-driven sampling is
-covered in isolation with an interval large enough that the clock never fires it mid-test.
+The conversation is driven by publishing ``user.says`` events directly and draining
+fire-and-forget dispatch, so assertions are deterministic.
 """
 
 import asyncio
+from pathlib import Path
 
 import pytest
 import pytest_asyncio
-from examples.example_host import AlertFormat, AlertLog, Sensor, ShutdownHandler, Thresholds
+from examples.example_host import Agent, Model, ShutdownHandler
 from examples.example_host.host import build_host
 
 from uxok import Core
-from uxok.protocols import Event
+from uxok.protocols import CoreState, Event
+
+_GRUMPY = Path(__file__).resolve().parents[1] / "examples" / "example_host" / "grumpy_persona.py"
 
 
 @pytest_asyncio.fixture(params=["open", "declared"])
 async def core(request):
     """A fresh core under each capability_access mode, with guaranteed cleanup."""
-    from uxok.protocols import CoreState
-
     c = Core(capability_access=request.param)
     try:
         yield c
@@ -41,8 +43,19 @@ async def _drain(seconds: float = 0.15):
     await asyncio.sleep(seconds)
 
 
+async def _replies(core) -> list[str]:
+    """Subscribe to agent.says and collect reply text into a list."""
+    out: list[str] = []
+
+    async def on_reply(ev: Event) -> None:
+        out.append(ev.data["text"])
+
+    await core.events.subscribe("agent.says", on_reply)
+    return out
+
+
 # ---------------------------------------------------------------------------
-# Composition
+# Composition + ordered boot
 # ---------------------------------------------------------------------------
 
 
@@ -51,126 +64,64 @@ async def test_build_host_registers_graph_and_exposes_capabilities(core):
     shutdown = await build_host(core)
 
     assert isinstance(shutdown, ShutdownHandler)
-    # The provider plugins are resolvable through the capability surface.
-    sensor = await core.get_capability("sensor")
-    alert_log = await core.get_capability("alert_log")
-    assert sensor is not None
-    assert alert_log.recent() == []
+    # The model provider is resolvable through the capability surface the moment
+    # build_host returns — providers are registered before the agent that needs them.
+    assert await core.get_capability("llm") is not None
 
 
 # ---------------------------------------------------------------------------
-# Event bus + hook extension point
+# Event bus + hook extension point + capability surface
 # ---------------------------------------------------------------------------
 
 
-async def _pipeline(core, *, with_formatter: bool) -> AlertLog:
-    """Register the reading→alert pipeline (optionally with the formatter) and return the log."""
-    if with_formatter:
-        await core.register_plugin(AlertFormat())
-    log = AlertLog()
-    await core.register_plugin(log)
-    await core.register_plugin(Thresholds())
-    return log
-
-
 @pytest.mark.asyncio
-async def test_hot_reading_produces_formatted_alert(core):
-    log = await _pipeline(core, with_formatter=True)
+async def test_user_message_gets_a_persona_voiced_reply(core):
+    await build_host(core)
+    replies = await _replies(core)
 
-    # A cold reading is below threshold: no alert.
-    await core.events.publish(Event("reading", {"celsius": 19.0, "seq": 1}))
-    await _drain()
-    assert log.recent() == []
-
-    # A hot reading crosses the threshold: one alert, formatted by the hook handler.
-    await core.events.publish(Event("reading", {"celsius": 31.0, "seq": 2}))
-    await _drain()
-    alerts = log.recent()
-    assert len(alerts) == 1
-    assert "🔥" in alerts[0]["message"]
-    assert alerts[0]["celsius"] == 31.0
-
-
-@pytest.mark.asyncio
-async def test_alert_fires_without_a_formatter(core):
-    """The format_alert hook is a genuine opt-in: the alert path works with no handler."""
-    log = await _pipeline(core, with_formatter=False)
-
-    await core.events.publish(Event("reading", {"celsius": 31.0, "seq": 1}))
+    await core.events.publish(Event("user.says", {"text": "hello there"}))
     await _drain()
 
-    alerts = log.recent()
-    assert len(alerts) == 1
-    # Default message (no formatter installed), not the AlertFormat string.
-    assert "🔥" not in alerts[0]["message"]
-    assert "at or above" in alerts[0]["message"]
+    assert replies == ["Cheerfully: you said 'hello there'."]
 
 
 @pytest.mark.asyncio
-async def test_threshold_is_configurable(core):
-    """A lower configured threshold makes an otherwise-cold reading alert."""
-    core2 = Core(plugin_configs={"thresholds": {"hot_threshold": 20.0}})
-    try:
-        log = AlertLog()
-        await core2.register_plugin(log)
-        await core2.register_plugin(Thresholds())
+async def test_agent_works_without_a_persona_handler(core):
+    """The persona hook is a genuine opt-in: with no handler the reply still goes out."""
+    await core.register_plugin(Model())
+    await core.register_plugin(Agent())  # no Persona registered
+    replies = await _replies(core)
 
-        await core2.events.publish(Event("reading", {"celsius": 21.0, "seq": 1}))
-        await _drain()
-        assert len(log.recent()) == 1
-    finally:
-        from uxok.protocols import CoreState
-
-        if core2.state is CoreState.RUNNING:
-            await core2.stop()
-
-
-# ---------------------------------------------------------------------------
-# State continuity
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.asyncio
-async def test_alert_log_state_roundtrips(core):
-    log = await _pipeline(core, with_formatter=True)
-    await core.events.publish(Event("reading", {"celsius": 31.0, "seq": 1}))
+    await core.events.publish(Event("user.says", {"text": "hi"}))
     await _drain()
 
-    state = await log.get_state()
-    assert len(state["alerts"]) == 1
-
-    # A fresh instance (as a hot reload would create) restores the prior history.
-    replacement = AlertLog()
-    await replacement.restore_state(state)
-    assert replacement.recent() == log.recent()
+    # firstresult with no handler yields None -> it simply prefixes the reply.
+    assert replies == ["None you said 'hi'."]
 
 
 # ---------------------------------------------------------------------------
-# Sensor: tick-driven sampling, exercised deterministically
+# Hot reload — swap the persona live
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_sensor_sampling_produces_readings(core):
-    readings = []
+async def test_hot_reloading_the_persona_changes_the_voice(core):
+    await build_host(core)
+    replies = await _replies(core)
 
-    async def on_reading(ev):
-        readings.append(ev.data)
+    await core.events.publish(Event("user.says", {"text": "first"}))
+    await _drain()
 
-    await core.events.subscribe("reading", on_reading)
-    # The default interval (~1s at 1000 Hz) far exceeds this test's runtime, so the clock
-    # never auto-fires the sensor. We step it by publishing sensor.sample ourselves, which
-    # makes the sampled sequence deterministic.
-    sensor = Sensor()
-    await core.register_plugin(sensor)
+    # Zero-downtime swap from the sibling module's source (same plugin name).
+    await core.load_plugin(_GRUMPY.read_text(), origin=str(_GRUMPY))
 
-    # Each sensor.sample drives exactly one reading along the fixed cycle.
-    for _ in range(3):
-        await core.events.publish(Event("sensor.sample", {}))
-        await _drain(0.05)
+    await core.events.publish(Event("user.says", {"text": "second"}))
+    await _drain()
 
-    assert [r["celsius"] for r in readings[:3]] == [19.0, 21.0, 26.0]
-    assert sensor.latest() == {"celsius": 26.0, "seq": 3}
+    assert replies == [
+        "Cheerfully: you said 'first'.",
+        "Grumpily: you said 'second'.",
+    ]
 
 
 # ---------------------------------------------------------------------------

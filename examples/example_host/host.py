@@ -1,19 +1,22 @@
-"""host.py — composes the example plugin graph into a runnable program.
+"""host.py — composes the conversational example into a runnable program.
 
-A *host* is the program that boots a :class:`~uxok.Core`, registers a graph of plugins on
-it, and keeps it alive. This is the smallest honest example of that shape:
+A *host* boots a :class:`~uxok.Core`, registers a graph of plugins on it, and
+keeps it alive. This is the modular, extended sibling of the README quick-start:
+the same Model / Agent / persona-hook conversation, but each plugin lives in its
+own module and the host exercises the kernel features a real program leans on:
 
-    build_host(core)  →  register the graph, return the ShutdownHandler
-    main()            →  boot a Core, build the host, block until shutdown
+    build_host(core)       register the graph in dependency order
+    core.load_plugin(...)  hot-swap the persona mid-conversation
+    ShutdownHandler        trap signals + system.shutdown, drain cleanly
 
-The pipeline it builds:
+The graph it builds:
 
-    Sensor ──emit "reading"──▶ Thresholds ──hook "format_alert"──▶ AlertFormat
-                                   │
-                                   └──emit "alert"──▶ AlertLog
+    user.says ──▶ Agent ──hook "persona"──▶ Persona   (hot-reloaded ──▶ grumpy)
+                    │ requires "llm"
+                    └──▶ Model
 
-``build_host`` is shared by ``main`` and the test suite so both boot the identical stack —
-the running program and the tested program never drift.
+``build_host`` is shared by ``main`` and the test suite, so the running program
+and the tested program never drift.
 
 Run it:
 
@@ -25,32 +28,44 @@ from __future__ import annotations
 import asyncio
 import logging
 import sys
+from pathlib import Path
 
-from examples.example_host.alert_format import AlertFormat
-from examples.example_host.alert_log import AlertLog
-from examples.example_host.sensor import Sensor
+from examples.example_host.agent import Agent
+from examples.example_host.model import Model
+from examples.example_host.persona import Persona
 from examples.example_host.shutdown import ShutdownHandler
-from examples.example_host.thresholds import Thresholds
 from uxok import Core
+from uxok.protocols import Event
 
+_HERE = Path(__file__).resolve().parent
 logger = logging.getLogger("example_host")
 
 
 async def build_host(core: Core) -> ShutdownHandler:
-    """Register the example plugin graph on ``core`` and return its ShutdownHandler.
+    """Register the conversation graph on ``core`` and return its ShutdownHandler.
 
-    Registration order follows the dependency arrows: the formatter and the log subscriber
-    come up before the threshold plugin that uses them, which comes up before the sensor
-    that feeds it. The ShutdownHandler is registered last so it traps signals only once the
-    graph is live.
+    Registration follows the dependency arrows: the providers (``Model`` for the
+    ``llm`` capability, ``Persona`` for the ``persona`` hook) come up before the
+    ``Agent`` that consumes them. The ShutdownHandler is registered last so it
+    traps signals only once the graph is live.
     """
-    await core.register_plugin(AlertFormat())
-    await core.register_plugin(AlertLog())
-    await core.register_plugin(Thresholds())
-    await core.register_plugin(Sensor())
+    await core.register_plugin(Model())  # provides "llm"
+    await core.register_plugin(Persona())  # contributes the "persona" hook
+    await core.register_plugin(Agent())  # requires "llm"
     shutdown = ShutdownHandler()
     await core.register_plugin(shutdown)
     return shutdown
+
+
+async def say(core: Core, text: str) -> None:
+    """Put one user line on the bus and let the agent's reply settle.
+
+    Event dispatch is fire-and-forget, so the brief sleep lets the agent's handler
+    (and its nested ``agent.says`` emit) run before the next line.
+    """
+    print(f"user:  {text}", file=sys.stderr)  # noqa: T201 — demo output is the point
+    await core.events.publish(Event("user.says", {"text": text}))
+    await asyncio.sleep(0.1)
 
 
 async def main() -> None:
@@ -60,26 +75,21 @@ async def main() -> None:
         format="%(asctime)s %(levelname)-8s %(name)s: %(message)s",
     )
 
-    core = Core(
-        plugin_configs={
-            # ~0.25s between samples at the default 1000 Hz tick rate, so the demo is lively.
-            "sensor": {"interval_ticks": 250},
-            "thresholds": {"hot_threshold": 30.0},
-        },
-    )
-
+    core = Core()
     async with core:
         shutdown = await build_host(core)
 
-        # Let a few samples flow (long enough to cross the threshold at least once), then
-        # read state back through the capability surface to show the graph is wired end to end.
-        await asyncio.sleep(3.0)
-        sensor = await core.get_capability("sensor")
-        alert_log = await core.get_capability("alert_log")
-        print(f"latest reading: {sensor.latest()}")  # noqa: T201 — demo output is the point
-        print(f"alerts so far: {alert_log.recent()}")  # noqa: T201 — demo output is the point
-        print("example host up — Ctrl-C to stop", file=sys.stderr)  # noqa: T201
+        await say(core, "hello there")
 
+        # Hot-swap the persona from a sibling module's source — zero downtime, and
+        # the agent's next reply speaks in the new voice without any change to it.
+        grumpy = (_HERE / "grumpy_persona.py").read_text()
+        await core.load_plugin(grumpy, origin=str(_HERE / "grumpy_persona.py"))
+        print("...[hot-reloaded the persona]...", file=sys.stderr)  # noqa: T201
+
+        await say(core, "what's the weather like?")
+
+        print("conversation done — Ctrl-C to exit", file=sys.stderr)  # noqa: T201
         await shutdown.wait_for_shutdown()
 
 

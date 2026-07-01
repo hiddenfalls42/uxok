@@ -1,6 +1,7 @@
 """Example host: a small conversational-agent program built on the uxok kernel.
 
-The modular, extended counterpart to the README quick-start. A ``user.says`` event
+The extended counterpart to the minimal ``getting_started/`` example (and the
+README quick-start it mirrors): start there, reach here for the fuller host. A ``user.says`` event
 reaches an ``Agent`` that answers through an ``llm`` capability it never imports,
 in a voice supplied by the ``persona`` hook — which the host hot-reloads mid-run
 to change the agent's tone with zero downtime. It wires the kernel primitives a

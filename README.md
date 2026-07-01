@@ -18,7 +18,7 @@ pip install uxok
 ```
 
 ## Quick start
-Basic functionality in a single script. The same example as a modular host is in [`examples/example_host/`](https://github.com/hiddenfalls42/uxok/tree/main/examples/example_host).
+Basic functionality in a single script. The same program split into modules — the structure a real project uses — is in [`examples/getting_started/`](https://github.com/hiddenfalls42/uxok/tree/main/examples/getting_started) and walked through by the [Getting started tutorial](https://hiddenfalls42.github.io/uxok/tutorials/getting-started/). For a fuller host with hot reload and graceful shutdown, see [`examples/example_host/`](https://github.com/hiddenfalls42/uxok/tree/main/examples/example_host).
 
 ```python
 import asyncio
@@ -38,16 +38,16 @@ class Model(Plugin):
     async def voice(self):
         return "Cheerfully:"
 
-# Other plugins can declare dependencies on other plugins' capabilities with "requires=". This builds a dependency graph, and tells the core which parts of itself to hand the plugin (a "core faucet"). 
+# Other plugins can declare dependencies on other plugins' capabilities with "requires=". This builds a dependency graph the kernel resolves for you.
 class Agent(Plugin):
     def __init__(self, done):
         super().__init__(name="agent", requires={"llm"})
         self.lines = ["hello there", "what's the weather like?"]
         self.done = done
     
-    # Capabilities can then be acquired from the "core faucet" object. 
+    # Required capabilities are then acquired by name; the kernel hands back the provider.
     async def on_start(self):
-        self.llm = await self.core.get_capability("llm")  # kernel wires it up
+        self.llm = await self.get_capability("llm")  # kernel wires it up
         await self.emit("turn")
 
     # Events are subscribed to in the same fashion as hooks. 

@@ -8,6 +8,16 @@ commit as its CHANGELOG entry.
 
 ## [Unreleased]
 
+### Changed
+- Documentation: `self.get_capability(...)` is now the single canonical plugin-author idiom
+  for resolving a capability (the convenience sibling of `self.emit`/`self.hook`/
+  `self.config`). `self.core.get_capability(...)` is demoted to an internal facet /
+  security-model detail — it remains callable and enforces the identical `requires ∪ resolves`
+  gate (it is the gated `CoreFacet` route exercised by the secure-capability suite), but is no
+  longer presented as a co-equal plugin idiom and is removed from reader-facing usage examples
+  (README, tutorial). **No runtime behavior change**: both routes still work identically; this
+  is a docs/guidance clarification only.
+
 ### Added
 - Ambient `check_plugin` on the attenuated facet (RFC 0006): `CoreFacet` now forwards
   `check_plugin(candidate) -> AdmissionResult`, mirroring `list()`, so a plugin under

@@ -1,18 +1,29 @@
 # Getting started
 
-Build your first uxok program. By the end you will have a running host that
-registers two plugins, exercises the capability system and the event bus, and
-shuts down cleanly — output you can see and verify.
+Build your first uxok program — structured the way a real one is. Each plugin
+lives in its own module, and a small *host* module composes them into a running
+conversation and shuts it down cleanly. By the end you will have a package you can
+run and verify.
+
+The [README](https://github.com/hiddenfalls42/uxok#quick-start) shows the same
+program crammed into a single script — handy for a quick look. This tutorial
+teaches the layout you actually want: plugins as separate modules that never
+import each other, wired together only through the kernel.
 
 ## What you will build
 
-A minimal host with two plugins:
+A package called `chat/` with three modules:
 
-- `CounterPlugin` — provides a `"counter"` capability (an object with an `increment()` method)
-- `ReporterPlugin` — declares `requires={"counter"}`, fetches the provider on start, and emits an event
+- `model.py` — a `Model` plugin that provides the `"llm"` capability and
+  contributes a `"persona"` hook
+- `agent.py` — an `Agent` plugin that declares `requires={"llm"}`, fetches the
+  model on start, and drives a short turn-by-turn conversation over the event bus
+- `host.py` — composes the two plugins on a `Core` and runs the conversation to
+  completion
 
-Running the program prints two lines to stdout. That is the test: if you see those
-lines, every major primitive worked.
+Running it prints four lines — a user line and an agent line for each of two
+turns. That is the test: if you see those lines, the capability system, the hook
+system, and the event bus all worked.
 
 ## Prerequisites
 
@@ -25,186 +36,244 @@ lines, every major primitive worked.
 pip install uxok
 ```
 
-## The complete program
+## Project layout
 
-Create a file called `main.py`. The full source is below; the walkthrough after
-it explains each part.
+Create a package — a folder with an `__init__.py` — holding the three modules:
+
+```text
+chat/
+├── __init__.py   # empty is fine
+├── model.py
+├── agent.py
+└── host.py
+```
+
+A ready-to-run copy of this package lives in the repository at
+[`examples/getting_started/`](https://github.com/hiddenfalls42/uxok/tree/main/examples/getting_started),
+and is covered by `tests/test_getting_started.py` so it never drifts from what you
+see here.
+
+## `model.py` — the provider
+
+A plugin subclasses `Plugin`. All constructor arguments — `name`, `provides`,
+`requires`, and the rest — are keyword-only, and there is no `core` parameter; the
+kernel attaches the core at registration time.
 
 ```python
+"""Model — provider of the ``llm`` capability and the ``persona`` hook.
+
+Stands in for an inference backend. It *provides* the ``llm`` capability; any
+plugin that declares ``requires={"llm"}`` calls :meth:`reply` through the
+capability surface without ever importing this class. The ``persona`` hook lets
+any plugin ask "what voice should replies use?" without knowing who answers.
+"""
+
+from __future__ import annotations
+
+from uxok import Plugin, hook
+
+
+class Model(Plugin):
+    """Provides ``llm``: turns a prompt (plus a persona prefix) into a reply."""
+
+    def __init__(self) -> None:
+        super().__init__(name="model", provides={"llm"})
+
+    async def reply(self, text: str, persona: str) -> str:
+        return f"{persona} you said '{text}'."
+
+    @hook("persona")
+    async def voice(self) -> str:
+        return "Cheerfully:"
+```
+
+`provides={"llm"}` declares this plugin as a provider of the `"llm"` capability.
+Any plugin that declares `requires={"llm"}` can then fetch this instance and call
+`reply()` on it — without importing `Model`.
+
+`@hook("persona")` contributes to a named extension point. A hook is a question
+any plugin can ask ("what voice should replies use?") and any plugin can answer;
+`Model` answers with `"Cheerfully:"`. `reply` is written `async` so callers can
+`await` it — a convention here, not a kernel rule.
+
+## `agent.py` — the consumer
+
+```python
+"""Agent — the conversational consumer of the ``llm`` capability.
+
+Declares ``requires={"llm"}`` and resolves that provider by name in
+``on_start`` — it never imports the sibling ``model`` module. It drives a short,
+self-sustaining conversation over the event bus: each ``turn``
+speaks one queued line, then re-emits ``turn`` for the next. When the queue is
+empty it sets the ``done`` event, which lets the host shut down.
+"""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+from uxok import Plugin, event
+
+if TYPE_CHECKING:
+    import asyncio
+
+    from uxok.protocols import Event
+
+
+class Agent(Plugin):
+    """Requires ``llm``; speaks each queued line, then signals the host it is done."""
+
+    def __init__(self, done: asyncio.Event) -> None:
+        super().__init__(name="agent", requires={"llm"})
+        self.lines = ["hello there", "what's the weather like?"]
+        self.done = done
+
+    async def on_start(self) -> None:
+        # Resolved once by name; the capability surface hands back the live provider.
+        self.llm = await self.get_capability("llm")
+        await self.emit("turn")
+
+    @event("turn")
+    async def speak(self, _ev: Event) -> None:
+        if not self.lines:
+            self.done.set()  # conversation over — release the host
+            return
+        line = self.lines.pop(0)
+        # The persona is resolved per reply through the hook, so a different
+        # provider's voice is picked up immediately — no re-resolution here.
+        persona = await self.hook("persona", firstresult=True)
+        print(f"user:  {line}")  # noqa: T201 — demo output is the point
+        print(f"agent: {await self.llm.reply(line, persona)}")  # noqa: T201
+        await self.emit("turn")  # re-arm the loop for the next line
+```
+
+Three primitives appear here.
+
+**Capabilities.** `on_start()` runs once when the plugin starts. It resolves the
+provider with `self.get_capability("llm")`, which returns the `Model` instance, so
+`self.llm.reply(...)` calls it directly. This is the canonical way a plugin reaches
+a dependency — the sibling of `self.emit` and `self.hook`. (`self.core` also
+exposes `get_capability`, but the plugin method is the one to reach for.) The
+plugin resolves the model *by name*; it never imports the `model` module.
+
+**Events.** `self.emit("turn")` publishes an event; `@event("turn")` subscribes a
+method to it. The agent drives itself: `on_start` emits the first `"turn"`, and
+each `speak` emits the next after printing, until `self.lines` is empty — then it
+sets the `done` event so the host can stop. The handler receives the `Event`, but
+this one has no use for it, so it is named `_ev`. Event names are matched as glob
+patterns, so `@event("turn.*")` would also match `turn.user.done`.
+
+**Hooks.** `self.hook("persona", firstresult=True)` runs the `"persona"` hook and
+takes the first answer. Drop `firstresult` and you get the full list of every
+handler's result in priority order — a pipeline rather than a single answer.
+
+## `host.py` — the composition
+
+```python
+"""host.py — composes the getting-started conversation into a runnable program.
+
+A *host* boots a :class:`~uxok.Core`, registers a graph of plugins on it in
+dependency order, and keeps it alive until the work is done. This is the minimal,
+modular sibling of the README quick-start: the same Model / Agent / persona-hook
+conversation, but each plugin lives in its own module.
+
+``build_host`` is shared by ``main`` and the test suite, so the running program
+and the tested program never drift.
+
+Run it:
+
+    python -m examples.getting_started.host
+"""
+
+from __future__ import annotations
+
 import asyncio
-from uxok import Core, Plugin, event, hook
+
+from uxok import Core
+
+from .agent import Agent
+from .model import Model
 
 
-class CounterPlugin(Plugin):
-    """Provides a simple integer counter as a capability."""
+async def build_host(core: Core, done: asyncio.Event) -> None:
+    """Register the two-plugin graph on ``core`` in dependency order.
 
-    def __init__(self):
-        super().__init__(provides={"counter"})
-        self.count = 0
-
-    def increment(self) -> int:
-        self.count += 1
-        return self.count
-
-    @event("counter.reset")
-    async def handle_reset(self, ev):
-        self.count = 0
-        print(f"Counter reset (source: {ev.source})")
+    The provider (``Model``, which provides ``llm``) comes up before the
+    ``Agent`` that requires it — registration order matters, providers first.
+    """
+    await core.register_plugin(Model())  # provides "llm"
+    await core.register_plugin(Agent(done))  # requires "llm"
 
 
-class ReporterPlugin(Plugin):
-    """Consumes the counter capability and reports on it."""
-
-    def __init__(self):
-        super().__init__(requires={"counter"})
-
-    async def on_start(self):
-        counter = await self.get_capability("counter")
-        value = counter.increment()
-        print(f"Counter after increment: {value}")
-        await self.emit("counter.reset")
-
-
-async def main():
-    core = Core()
-
-    await core.start()
-    await core.register_plugin(CounterPlugin())
-    await core.register_plugin(ReporterPlugin())
-
-    await core.stop()
+async def main() -> None:
+    done = asyncio.Event()
+    async with Core() as core:  # context manager starts/stops the kernel
+        await build_host(core, done)
+        await done.wait()  # stay alive until the agent finishes the conversation
 
 
 if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-Run it:
+`Core` is the host: it owns the event bus, hook system, plugin registry, and
+capability system. Used as an async context manager, `async with Core() as core`
+starts the kernel on entry and tears it down on exit — no explicit
+`start()`/`stop()` calls. (You can call `await core.start()` / `await core.stop()`
+by hand when you need finer control — see
+[Manage core lifecycle](../how-to/how-to-manage-core-lifecycle.md).)
+
+**Registration order matters.** The kernel checks `requires` when
+`register_plugin` is called and raises `MissingCapabilityError` immediately if no
+registered plugin provides the capability. Register providers before consumers —
+which is why `build_host` adds `Model` before `Agent`.
+
+The `asyncio.Event` is how `main()` knows when to stop. Registration returns
+immediately, so without `await done.wait()` the block would exit before the
+conversation ran. The agent calls `done.set()` when it runs out of lines, which
+releases `wait()` and lets the context manager shut everything down.
+
+Keeping `build_host` separate from `main` is a small but useful habit: the test
+suite calls the same `build_host`, so the program you run and the program you test
+can never drift apart.
+
+## Run it
+
+From the folder *containing* `chat/`:
 
 ```bash
-python main.py
+python -m chat.host
 ```
 
 Expected output:
 
 ```text
-Counter after increment: 1
-Counter reset (source: reporter_plugin)
+user:  hello there
+agent: Cheerfully: you said 'hello there'.
+user:  what's the weather like?
+agent: Cheerfully: you said 'what's the weather like?'.
 ```
 
-## Walkthrough
+## The key idea
 
-### The host
+Open `model.py` and `agent.py` side by side: they share no import. `Agent` never
+mentions `Model`; it asks for the `"llm"` capability by name and the kernel hands
+back whoever provides it. The host is the only place the two meet, and it wires
+them by capability, not by import.
 
-`Core` is the host. It owns the event bus, hook system, plugin registry, and
-capability system. You create one instance and call `await core.start()` before
-registering any plugins.
-
-```python
-core = Core()
-await core.start()
-```
-
-`start()` transitions the core from `INITIALIZED` to `RUNNING` and starts the
-internal tick clock. The constructor accepts optional keyword arguments for every
-tunable — `max_plugins`, `tick_rate`, `plugin_configs`, and others — but the
-defaults work for most programs and nothing is required.
-
-### Plugins
-
-Every plugin subclasses `Plugin`. All constructor arguments — `name`, `version`,
-`provides`, `requires`, and others — are keyword-only. There is no `core`
-parameter; the kernel attaches the core at registration time.
-
-```python
-class CounterPlugin(Plugin):
-    def __init__(self):
-        super().__init__(provides={"counter"})
-        self.count = 0
-```
-
-The name `"counter_plugin"` is derived automatically by converting the class name
-from CamelCase to snake_case (no suffix is stripped; `CounterPlugin` becomes
-`counter_plugin`). Override it with `name="my_name"`.
-
-`provides={"counter"}` declares this plugin as a provider of the `"counter"`
-capability. Any plugin declaring `requires={"counter"}` can then call
-`self.get_capability("counter")` to receive this instance.
-
-### Capabilities
-
-The capability system is uxok's dependency injection mechanism. It is explicit:
-both sides declare their contract in `__init__`, and the kernel validates them at
-registration time.
-
-```python
-class ReporterPlugin(Plugin):
-    def __init__(self):
-        super().__init__(requires={"counter"})
-
-    async def on_start(self):
-        counter = await self.get_capability("counter")
-        value = counter.increment()
-```
-
-`get_capability("counter")` returns the plugin instance that provides that
-capability. In this case that is the `CounterPlugin` instance itself — method
-calls on it work directly.
-
-Registration order matters. The kernel checks `requires` when `register_plugin` is
-called and raises `MissingCapabilityError` immediately if no registered plugin
-provides the named capability. Register providers before consumers.
-
-### Events
-
-`self.emit(name, data)` publishes an event. The name is published verbatim — no
-prefix is added. `Event.source` is set automatically to the emitting plugin's name,
-so handlers know who sent the event without encoding that in the topic.
-
-```python
-await self.emit("counter.reset")
-```
-
-`@event("counter.reset")` subscribes a method to that exact name. The decorator
-accepts glob patterns too — `@event("counter.*")` matches any event whose name
-begins with `counter.`, including multi-segment names like `counter.ops.reset`.
-
-```python
-@event("counter.reset")
-async def handle_reset(self, ev):
-    self.count = 0
-    print(f"Counter reset (source: {ev.source})")
-```
-
-The handler receives an `Event` object. `ev.source` is the name of the plugin that
-called `emit()` — here `"reporter_plugin"`, which matches the second line of
-expected output.
-
-Dispatch is concurrent fire-and-forget. `emit()` returns immediately; each
-subscriber runs as its own independent asyncio task. A slow handler never blocks
-the publisher or other subscribers.
-
-### Shutdown
-
-```python
-await core.stop()
-```
-
-`stop()` calls `on_stop()` on every registered plugin, unregisters them all, and
-transitions the core to `STOPPED`. The core is then reusable: call `start()` again
-with a fresh plugin graph for the next run. Plugin instances are one-shot; do not
-re-register a stopped plugin.
-
-Override `on_stop()` to release resources your plugin acquired in `on_start()`:
-
-```python
-async def on_stop(self):
-    await self.connection.close()
-```
+That decoupling is the whole point of the structure. Swap in a different `"llm"`
+provider, or hot-reload one at runtime, and the agent that consumes it never
+changes.
 
 ## Next steps
 
-Each kernel primitive has its own how-to and explanation pages.
+For the same conversation with the features a real host leans on — a persona as
+its own hot-reloadable plugin, live plugin swapping, and graceful signal-driven
+shutdown — read
+[`examples/example_host/`](https://github.com/hiddenfalls42/uxok/tree/main/examples/example_host),
+the fuller sibling of this starter.
+
+Each kernel primitive also has its own how-to and explanation pages.
 
 **Core and lifecycle**
 

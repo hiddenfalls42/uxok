@@ -392,6 +392,13 @@ Notes:
 | `metadata` | `PluginMetadata` (immutable) |
 | `core` | `Core` — under `capability_access="declared"`/`"sealed"`, an attenuated facet exposing only the plugin-safe kernel surface (`tick`, `slip`, `state`, `config`, `events`, `hooks`, ambient `list`/`check_plugin`, gated `get_capability`), not the real `Core` (RFC 0001 §3.2.1, RFC 0006) |
 
+The canonical plugin-author idiom for resolving a capability is
+`self.get_capability(...)` (§3.2), the convenience sibling of `self.emit`/`self.hook`/
+`self.config`. `self.core.get_capability(...)` is the same call on the lower-level facet
+and is retained for the security model (it is the gated facet route exercised by the
+secure-capability suite, RFC 0001 §3.2.1) — an **equivalent gate, not a second recommended
+path**. Prefer `self.get_capability(...)` in plugin code.
+
 ---
 
 ## 4. Decorators

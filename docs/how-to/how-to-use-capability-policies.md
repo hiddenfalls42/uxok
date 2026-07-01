@@ -122,7 +122,7 @@ and raise `CapabilityError` when nothing is found.
 
     ```python
     async def process(self) -> None:
-        cache = await self.core.get_capability("cache")
+        cache = await self.get_capability("cache")
         if cache is not None:
             return await cache.get("key")
         return self.compute_slowly()

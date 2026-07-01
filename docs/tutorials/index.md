@@ -4,4 +4,4 @@ Tutorials lead you through complete, hands-on lessons that end in a working, run
 
 ## In this section
 
-- [Getting started](getting-started.md) — Build a minimal host with two plugins, wire a capability between them, and run the full lifecycle from `Core.start()` to `Core.stop()`.
+- [Getting started](getting-started.md) — Build a properly structured uxok project: two plugins in their own modules, a host that composes them, and a capability wired between them by name — the layout a real project uses, not a single-file script.

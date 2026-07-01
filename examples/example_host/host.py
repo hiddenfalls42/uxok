@@ -1,9 +1,9 @@
 """host.py — composes the conversational example into a runnable program.
 
 A *host* boots a :class:`~uxok.Core`, registers a graph of plugins on it, and
-keeps it alive. This is the modular, extended sibling of the README quick-start:
-the same Model / Agent / persona-hook conversation, but each plugin lives in its
-own module and the host exercises the kernel features a real program leans on:
+keeps it alive. This is the extended sibling of the minimal ``getting_started/``
+example: the same Model / Agent / persona-hook conversation, one plugin per
+module, but the host exercises the kernel features a real program leans on:
 
     build_host(core)       register the graph in dependency order
     core.load_plugin(...)  hot-swap the persona mid-conversation

@@ -8,5 +8,14 @@ shutdown.
 
 Run it with `python -m examples.example_host.host`; `tests/test_example_host.py`
 is its acceptance suite and runs the whole graph under both `capability_access`
-modes. More examples are planned as time allows — otherwise the docs cover each
-primitive in depth.
+modes.
+
+`getting_started/` is the minimal counterpart — the same Model / Agent / persona-hook
+conversation, two plugins and a host, that self-terminates with checkable output.
+It is the package the [Getting started](../docs/tutorials/getting-started.md)
+tutorial walks through, run with `python -m examples.getting_started.host` and
+covered by `tests/test_getting_started.py`. Start there; reach for `example_host/`
+when you want hot reload and graceful shutdown.
+
+More examples are planned as time allows — otherwise the docs cover each primitive
+in depth.

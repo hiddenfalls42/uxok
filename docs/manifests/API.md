@@ -146,10 +146,10 @@ See [§7.3 CoreConfig](#73-coreconfig) for the accepted enum values and numeric 
 |---|---|---|---|
 | `start` | `async def start(self) -> None` | `None` | `CoreError` if not INITIALIZED |
 | `stop` | `async def stop(self) -> None` | `None` | `CoreError` if not in a stoppable state |
-| `register_plugin` | `async def register_plugin(self, plugin: PluginProtocol) -> bool` | `True` if registered | `PluginError`, `MissingCapabilityError` |
+| `register_plugin` | `async def register_plugin(self, plugin: PluginProtocol) -> bool` | `True` if registered | `CoreError` if not RUNNING, else `PluginError`, `MissingCapabilityError` |
 | `check_plugin` | `async def check_plugin(self, candidate: PluginProtocol) -> AdmissionResult` | `AdmissionResult` (advisory; never raises) | — |
 | `unregister_plugin` | `async def unregister_plugin(self, plugin_id: UUID \| str, *, force: bool = False) -> bool` | `False` if not found | `PluginError` (active-operation or dependents present) |
-| `load_plugin` | `async def load_plugin(self, code: str, origin: str \| None = None) -> bool` | `True` if loaded or reloaded | `PluginError` (compile failure or 0 or >1 Plugin subclass found) |
+| `load_plugin` | `async def load_plugin(self, code: str, origin: str \| None = None) -> bool` | `True` if loaded or reloaded | `CoreError` if not RUNNING, else `PluginError` (compile failure or 0 or >1 Plugin subclass found) |
 | `get_plugin` | `async def get_plugin(self, plugin_id: UUID \| str) -> PluginProtocol \| None` | live instance or `None` | — |
 | `list` | `async def list(self) -> PluginCollection` | `PluginCollection` — the single discovery surface (plugins **and** capabilities; see [§10](#10-plugincollection-and-pluginview)) | — |
 | `get_capability` | `async def get_capability(self, capability: str \| type, *, tag: str \| None = None) -> Any` | provider | `CapabilityError` if unavailable; `PluginError` if provider fails protocol contract |
@@ -158,6 +158,7 @@ See [§7.3 CoreConfig](#73-coreconfig) for the accepted enum values and numeric 
 
 Notes:
 
+- `register_plugin` and `load_plugin` require the core to be `RUNNING` — they raise `CoreError` on a non-running core. Start the core first (`await core.start()` or use `async with Core() as core:`).
 - `unregister_plugin`'s `force` is **keyword-only** (`*, force: bool = False`).
 - `get_capability`'s `tag` is **keyword-only**. When `capability` is a `type`, it is
   resolved to a name via `derive_capability_name` before lookup.

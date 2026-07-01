@@ -13,10 +13,8 @@ Read the [docs](https://hiddenfalls42.github.io/uxok/) to learn more!
 > The docs are a WIP but I will be updating them actively: if you notice something off with them (or the code), please drop me an [issue](https://github.com/hiddenfalls42/uxok/issues).
 
 ## Installation
-Not on PyPI yet — install from the repo:
-
 ```bash
-pip install git+https://github.com/hiddenfalls42/uxok.git
+pip install uxok
 ```
 
 ## Quick start

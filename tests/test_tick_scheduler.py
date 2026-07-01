@@ -122,7 +122,7 @@ class TestSchedulerOwnership:
     """unschedule_owner removes entries by instance identity."""
 
     @pytest.mark.asyncio
-    async def test_at_tick_removed_on_unregister(self, clean_core):
+    async def test_at_tick_removed_on_unregister(self, started_core):
         """A plugin's deferred emit must not survive unregistration."""
         from uxok import Plugin
 
@@ -130,7 +130,7 @@ class TestSchedulerOwnership:
             def __init__(self):
                 super().__init__(name="deferred")
 
-        core = clean_core
+        core = started_core
         plugin = Deferred()
         await core.register_plugin(plugin)
 

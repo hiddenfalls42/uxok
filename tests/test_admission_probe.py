@@ -71,10 +71,10 @@ class TestAdmissionVerdicts:
         assert result.missing_requires == frozenset({"storage"})
 
     @pytest.mark.asyncio
-    async def test_id_conflict_fault(self, clean_core: Core):
+    async def test_id_conflict_fault(self, started_core: Core):
         provider = Provider()
-        assert await clean_core.register_plugin(provider)
-        result = await clean_core.check_plugin(provider)
+        assert await started_core.register_plugin(provider)
+        result = await started_core.check_plugin(provider)
         assert not result.ok
         assert result.id_conflict
 
@@ -156,14 +156,14 @@ class TestAtomicAdmission:
             await core.stop()
 
     @pytest.mark.asyncio
-    async def test_drift_freedom_probe_matches_commit(self, clean_core: Core):
+    async def test_drift_freedom_probe_matches_commit(self, started_core: Core):
         """The same candidate yields the same verdict via probe and via register."""
         consumer = Consumer()
-        probe = await clean_core.check_plugin(consumer)
+        probe = await started_core.check_plugin(consumer)
         assert probe.missing_requires == frozenset({"storage"})
 
         with pytest.raises(MissingCapabilityError):
-            await clean_core.register_plugin(consumer)
+            await started_core.register_plugin(consumer)
 
         # the probe still reports the same fault afterwards (no mutation occurred)
-        assert await clean_core.check_plugin(consumer) == probe
+        assert await started_core.check_plugin(consumer) == probe

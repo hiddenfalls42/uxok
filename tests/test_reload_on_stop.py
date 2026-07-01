@@ -10,7 +10,7 @@ Spec (kernel change landing in parallel):
 - After a successful reload the kernel sets old._shutdown = True, so a later
   old_instance.stop() call is a no-op (prevents double on_stop).
 
-All tests use the `clean_core` fixture from conftest.py.
+All tests use the `started_core` fixture from conftest.py.
 Event dispatch is tick-gated; we wait with helpers.wait_until, never bare sleep.
 """
 
@@ -116,17 +116,17 @@ class TestReloadOnStopContract:
     # ------------------------------------------------------------------
 
     @pytest.mark.asyncio
-    async def test_old_on_stop_called_exactly_once_on_success(self, clean_core):
+    async def test_old_on_stop_called_exactly_once_on_success(self, started_core):
         """Successful reload calls the old instance's on_stop exactly once.
 
         The new instance's on_stop must NOT be called during the swap.
         """
-        await clean_core.load_plugin(_WIDGET_V1)
-        v1 = await clean_core.get_plugin("widget")
+        await started_core.load_plugin(_WIDGET_V1)
+        v1 = await started_core.get_plugin("widget")
         assert v1.on_stop_calls == 0
 
-        await clean_core.load_plugin(_WIDGET_V2)
-        v2 = await clean_core.get_plugin("widget")
+        await started_core.load_plugin(_WIDGET_V2)
+        v2 = await started_core.get_plugin("widget")
 
         # v1's on_stop was called exactly once during the swap.
         assert v1.on_stop_calls == 1
@@ -139,16 +139,16 @@ class TestReloadOnStopContract:
     # ------------------------------------------------------------------
 
     @pytest.mark.asyncio
-    async def test_on_stop_not_called_on_start_rollback(self, clean_core):
+    async def test_on_stop_not_called_on_start_rollback(self, started_core):
         """When v2 on_start raises, the reload rolls back and v1's on_stop is NOT called."""
-        await clean_core.load_plugin(_WIDGET_V1)
-        v1 = await clean_core.get_plugin("widget")
+        await started_core.load_plugin(_WIDGET_V1)
+        v1 = await started_core.get_plugin("widget")
 
         with pytest.raises(RuntimeError, match="v2 on_start failed"):
-            await clean_core.load_plugin(_WIDGET_V2_BAD_START)
+            await started_core.load_plugin(_WIDGET_V2_BAD_START)
 
         # Rollback: v1 is still serving.
-        assert await clean_core.get_plugin("widget") is v1
+        assert await started_core.get_plugin("widget") is v1
         # on_stop must NOT have been called on rollback.
         assert v1.on_stop_calls == 0
 
@@ -157,15 +157,15 @@ class TestReloadOnStopContract:
     # ------------------------------------------------------------------
 
     @pytest.mark.asyncio
-    async def test_on_stop_not_called_on_restore_state_rollback(self, clean_core):
+    async def test_on_stop_not_called_on_restore_state_rollback(self, started_core):
         """When v2 restore_state raises, the reload rolls back and v1's on_stop is NOT called."""
-        await clean_core.load_plugin(_WIDGET_V1_WITH_STATE)
-        v1 = await clean_core.get_plugin("widget")
+        await started_core.load_plugin(_WIDGET_V1_WITH_STATE)
+        v1 = await started_core.get_plugin("widget")
 
         with pytest.raises(ValueError, match="v2 restore_state failed"):
-            await clean_core.load_plugin(_WIDGET_V2_BAD_RESTORE)
+            await started_core.load_plugin(_WIDGET_V2_BAD_RESTORE)
 
-        assert await clean_core.get_plugin("widget") is v1
+        assert await started_core.get_plugin("widget") is v1
         assert v1.on_stop_calls == 0
 
     # ------------------------------------------------------------------
@@ -173,7 +173,7 @@ class TestReloadOnStopContract:
     # ------------------------------------------------------------------
 
     @pytest.mark.asyncio
-    async def test_raising_on_stop_does_not_fail_reload(self, clean_core):
+    async def test_raising_on_stop_does_not_fail_reload(self, started_core):
         """A raising on_stop must not abort the reload.
 
         Expected post-conditions:
@@ -188,22 +188,22 @@ class TestReloadOnStopContract:
             name="collector",
             subscribe_to="core.plugin_reloaded",
         )
-        await clean_core.register_plugin(collector)
+        await started_core.register_plugin(collector)
 
         error_events: list = []
 
         async def catch_plugin_error(event):
             error_events.append(event)
 
-        await clean_core.events.subscribe("core.plugin_error", catch_plugin_error)
+        await started_core.events.subscribe("core.plugin_error", catch_plugin_error)
 
-        await clean_core.load_plugin(_WIDGET_V1_RAISING_STOP)
-        v1 = await clean_core.get_plugin("widget")
+        await started_core.load_plugin(_WIDGET_V1_RAISING_STOP)
+        v1 = await started_core.get_plugin("widget")
         assert v1.on_stop_calls == 0
 
         # Reload must not raise even though v1.on_stop() will raise.
-        await clean_core.load_plugin(_WIDGET_V2)
-        v2 = await clean_core.get_plugin("widget")
+        await started_core.load_plugin(_WIDGET_V2)
+        v2 = await started_core.get_plugin("widget")
 
         # v1 on_stop was attempted exactly once (even though it raised).
         assert v1.on_stop_calls == 1
@@ -227,16 +227,16 @@ class TestReloadOnStopContract:
     # ------------------------------------------------------------------
 
     @pytest.mark.asyncio
-    async def test_no_double_on_stop_via_retained_reference(self, clean_core):
+    async def test_no_double_on_stop_via_retained_reference(self, started_core):
         """Calling stop() on a retained old reference after reload must be a no-op.
 
         The kernel sets old._shutdown = True after the swap; Plugin.stop()
         guards on this flag and returns without calling on_stop again.
         """
-        await clean_core.load_plugin(_WIDGET_V1)
-        v1 = await clean_core.get_plugin("widget")
+        await started_core.load_plugin(_WIDGET_V1)
+        v1 = await started_core.get_plugin("widget")
 
-        await clean_core.load_plugin(_WIDGET_V2)
+        await started_core.load_plugin(_WIDGET_V2)
 
         # v1.on_stop was called once during the reload swap.
         assert v1.on_stop_calls == 1
@@ -250,7 +250,7 @@ class TestReloadOnStopContract:
     # ------------------------------------------------------------------
 
     @pytest.mark.asyncio
-    async def test_resource_leak_regression_across_reload_cycles(self, clean_core):
+    async def test_resource_leak_regression_across_reload_cycles(self, started_core):
         """After N reload cycles, exactly one resource stays open — the live instance's.
 
         Pattern: on_start acquires a closeable stub resource (append to shared list),
@@ -284,7 +284,7 @@ class TestReloadOnStopContract:
         # register_plugin starts the plugin internally (calls plugin.start()); no
         # manual start() call needed.
         first = ResourcePlugin()
-        await clean_core.register_plugin(first)
+        await started_core.register_plugin(first)
 
         # 5 reload cycles via the kernel's internal hot-reload entry point.
         # New instances must share the old ID (zero-downtime invariant), exactly
@@ -292,16 +292,16 @@ class TestReloadOnStopContract:
         # Without this, swap_provider raises ValueError — the ID is the
         # discriminator for atomic swap.
         for _ in range(5):
-            old_v = await clean_core.get_plugin("resource_holder")
+            old_v = await started_core.get_plugin("resource_holder")
             new_v = ResourcePlugin()
             new_v._assign_id(old_v.metadata.id)
-            await clean_core._reload_plugin_now(old_v, new_v)
+            await started_core._reload_plugin_now(old_v, new_v)
 
         # Exactly one resource must remain open — the live instance's.
         assert len(open_resources) == 1, (
             f"Expected 1 open resource, got {len(open_resources)}: {open_resources}"
         )
-        live = await clean_core.get_plugin("resource_holder")
+        live = await started_core.get_plugin("resource_holder")
         assert open_resources[0] == live._resource_id
 
-        await clean_core.stop()
+        await started_core.stop()

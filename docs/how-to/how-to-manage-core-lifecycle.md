@@ -14,25 +14,9 @@ await core.start()
 `start()` transitions the core from `INITIALIZED` to `RUNNING`. It starts the tick
 clock and readies the event bus for dispatch.
 
-## Register a plugin before starting
-
-2. Skip the explicit `start()` call when you register a plugin immediately — the core
-   auto-starts on the first successful registration.
-
-```python
-from uxok import Core, Plugin
-
-core = Core()
-await core.register_plugin(MyPlugin())
-# core.state is now CoreState.RUNNING
-```
-
-Only the first registration triggers auto-start. Subsequent registrations on a running
-core do nothing to core state.
-
 ## Use the context manager
 
-3. Wrap the core in an `async with` block for automatic teardown.
+2. Wrap the core in an `async with` block for automatic teardown.
 
 ```python
 from uxok import Core
@@ -49,7 +33,7 @@ core lifetime is bounded to a single code block.
 
 ## Stop the core
 
-4. Call `stop()` to tear down the core and release all resources.
+3. Call `stop()` to tear down the core and release all resources.
 
 ```python
 await core.stop()
@@ -62,7 +46,7 @@ the core is reusable with a fresh plugin graph.
 
 ## Check the current state
 
-5. Read `core.state` to inspect the current lifecycle position.
+4. Read `core.state` to inspect the current lifecycle position.
 
 ```python
 from uxok.protocols import CoreState
@@ -86,7 +70,7 @@ events and are handled by supervisor plugins.
 
 ## Restart a stopped core
 
-6. Call `start()` again from a stopped or failed core.
+5. Call `start()` again from a stopped or failed core.
 
 ```python
 await core.stop()
@@ -110,7 +94,7 @@ await core.start()
 
 ## Observe every state transition
 
-7. Register a `core.state.changed` hook to react to lifecycle transitions.
+6. Register a `core.state.changed` hook to react to lifecycle transitions.
 
 ```python
 from uxok import Plugin, hook
@@ -130,7 +114,7 @@ positional arguments.
 
 ## Tune the core at construction
 
-8. Pass configuration as keyword arguments when creating the core.
+7. Pass configuration as keyword arguments when creating the core.
 
 ```python
 core = Core(

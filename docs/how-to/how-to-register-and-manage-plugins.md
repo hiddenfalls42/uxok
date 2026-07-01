@@ -21,19 +21,19 @@ class DataProcessor(Plugin):
         print("DataProcessor started")
 ```
 
-2. Create a `Core` instance and register the plugin.
+2. Create a `Core` instance, start it, and register the plugin.
 
 ```python
 core = Core()
+await core.start()
 plugin = DataProcessor()
 await core.register_plugin(plugin)
 ```
 
 `register_plugin` validates dependencies, registers declared capabilities,
 calls the plugin's `on_start()` handler, and fires the `plugin.registered`
-hook. If the core is still in its initial state when the first plugin lands,
-it auto-starts — you do not need to call `core.start()` manually before
-registering.
+hook. The core must be `RUNNING` — call `core.start()` (or use
+`async with Core() as core:`) before registering plugins.
 
 !!! note
     `plugin.registered` and `plugin.unregistered` are hook extension points,

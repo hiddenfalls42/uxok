@@ -53,10 +53,10 @@ async def _drain(seconds: float = 0.05):
 
 
 @pytest.mark.asyncio
-async def test_reload_replaces_handler_behavior(clean_core):
+async def test_reload_replaces_handler_behavior(started_core):
     """After a reload, the old version's handlers stop firing and the new
     version's handlers take over — no duplicates, no gaps."""
-    core = clean_core
+    core = started_core
     await core.load_plugin(COUNTER_V1)
     v1 = await core.get_plugin("counter")
 
@@ -78,9 +78,9 @@ async def test_reload_replaces_handler_behavior(clean_core):
 
 
 @pytest.mark.asyncio
-async def test_capability_resolvable_throughout_reload(clean_core):
+async def test_capability_resolvable_throughout_reload(started_core):
     """The capability stays resolvable before, during, and after reload."""
-    core = clean_core
+    core = started_core
     await core.load_plugin(COUNTER_V1)
 
     failures = []
@@ -111,9 +111,9 @@ async def test_capability_resolvable_throughout_reload(clean_core):
 
 
 @pytest.mark.asyncio
-async def test_events_delivered_exactly_once_across_reloads(clean_core):
+async def test_events_delivered_exactly_once_across_reloads(started_core):
     """Events published while reloads happen are each handled exactly once."""
-    core = clean_core
+    core = started_core
     await core.load_plugin(COUNTER_V1)
 
     total = 60
@@ -141,10 +141,10 @@ async def test_events_delivered_exactly_once_across_reloads(clean_core):
 
 
 @pytest.mark.asyncio
-async def test_failed_reload_keeps_old_version_serving(clean_core):
+async def test_failed_reload_keeps_old_version_serving(started_core):
     """A reload that fails on start leaves the old version fully serving:
     events still handled once, capability still resolvable."""
-    core = clean_core
+    core = started_core
     await core.load_plugin(COUNTER_V1)
     v1 = await core.get_plugin("counter")
 
@@ -196,14 +196,14 @@ class HookPlugin(Plugin):
 
 
 @pytest.mark.asyncio
-async def test_hook_handler_replaced_after_reload(clean_core):
+async def test_hook_handler_replaced_after_reload(started_core):
     """After reload, only v2's @hook handler fires — no zombie double-execution.
 
     Mirrors the @event regression test style: register v1, execute hook
     (verify v1-only), reload to v2, execute hook again (verify v2-only,
     exactly one result).
     """
-    core = clean_core
+    core = started_core
     await core.load_plugin(HOOK_PLUGIN_V1)
 
     results_v1 = await core.hooks.execute("x.y")
@@ -239,7 +239,7 @@ class ResourcePlugin(Plugin):
 
 
 @pytest.mark.asyncio
-async def test_exclusive_resource_held_by_v1_blocks_v2_on_start(clean_core):
+async def test_exclusive_resource_held_by_v1_blocks_v2_on_start(started_core):
     """When v2's on_start cannot acquire a resource held by v1, reload is rolled back.
 
     This pins the failure mode: the exception propagates, the rollback restores
@@ -249,7 +249,7 @@ async def test_exclusive_resource_held_by_v1_blocks_v2_on_start(clean_core):
     The key ordering guarantee exercised here: on_stop() is called only AFTER
     a successful swap, so v1 still holds the resource when v2's on_start runs.
     """
-    core = clean_core
+    core = started_core
     await core.load_plugin(_RESOURCE_PLUGIN)
     v1 = await core.get_plugin("resource")
     assert getattr(core, "_test_resource_held", False) is True
@@ -298,10 +298,10 @@ BARE_V2 = BARE_V1.replace("return 1", "return 2")
 
 
 @pytest.mark.asyncio
-async def test_bare_constructor_plugin_hot_reloads(clean_core):
+async def test_bare_constructor_plugin_hot_reloads(started_core):
     """A plugin with `def __init__(self)` (no **kw, no id) hot-reloads,
     and the kernel preserves its id across the swap."""
-    core = clean_core
+    core = started_core
     await core.load_plugin(BARE_V1)
     v1 = await core.get_plugin("bare")
     assert v1.version() == 1
@@ -316,9 +316,9 @@ async def test_bare_constructor_plugin_hot_reloads(clean_core):
 
 
 @pytest.mark.asyncio
-async def test_kernel_assigns_unique_ids(clean_core):
+async def test_kernel_assigns_unique_ids(started_core):
     """Every plugin gets a distinct kernel-generated id; authors don't set it."""
-    core = clean_core
+    core = started_core
     await core.load_plugin(BARE_V1)
     bare_id = (await core.get_plugin("bare")).metadata.id
 
@@ -328,7 +328,7 @@ async def test_kernel_assigns_unique_ids(clean_core):
     assert bare_id != counter_id
 
 
-def test_plugin_constructor_rejects_id(clean_core):
+def test_plugin_constructor_rejects_id(started_core):
     """`id` is retired from the public constructor — passing it is an unknown
     kwarg (TypeError), so authors cannot set identity."""
     from uxok import Plugin

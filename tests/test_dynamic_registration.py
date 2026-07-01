@@ -484,13 +484,13 @@ _DYNAMIC_CLOSURE_HOOK_V2 = _DYNAMIC_CLOSURE_HOOK_V1.replace('"v1-closure"', '"v2
 
 class TestHotReloadCleanup:
     @pytest.mark.asyncio
-    async def test_dynamic_subscribe_cleaned_up_after_reload(self, clean_core: Core) -> None:
+    async def test_dynamic_subscribe_cleaned_up_after_reload(self, started_core: Core) -> None:
         """After reloading a plugin that subscribed dynamically in on_start,
         the OLD instance's handler no longer fires — no zombie double-fire.
 
         Uses the load_plugin hot-reload path from test_hot_reload.py pattern.
         """
-        core = clean_core
+        core = started_core
 
         await core.load_plugin(_DYNAMIC_SUBSCRIBER_V1)
         v1 = await core.get_plugin("dynamic_sub")
@@ -514,10 +514,10 @@ class TestHotReloadCleanup:
         assert v2.received == [("v2", 1)]
 
     @pytest.mark.asyncio
-    async def test_dynamic_hook_cleaned_up_after_reload(self, clean_core: Core) -> None:
+    async def test_dynamic_hook_cleaned_up_after_reload(self, started_core: Core) -> None:
         """After reloading a plugin that registered a hook dynamically in on_start,
         only the new instance's hook fires — no double-execution."""
-        core = clean_core
+        core = started_core
 
         await core.load_plugin(_DYNAMIC_HOOK_V1)
         r1 = await core.hooks.execute("dyn.hook")
@@ -533,14 +533,14 @@ class TestHotReloadCleanup:
         assert r2[0] == "v2-marker"
 
     @pytest.mark.asyncio
-    async def test_dynamic_closure_hook_cleaned_up_after_reload(self, clean_core: Core) -> None:
+    async def test_dynamic_closure_hook_cleaned_up_after_reload(self, started_core: Core) -> None:
         """A CLOSURE handler registered via register_hook is drained on hot-reload.
 
         Closures have no bound-method ``__self__``, so only the explicit ``owner``
         binding can attribute them to the old instance. Before the owner channel
         existed this leaked and double-fired; this guards the fix.
         """
-        core = clean_core
+        core = started_core
 
         await core.load_plugin(_DYNAMIC_CLOSURE_HOOK_V1)
         r1 = await core.hooks.execute("dyn.closure_hook")

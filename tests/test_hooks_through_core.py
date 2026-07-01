@@ -79,9 +79,9 @@ async def _wait_for_ticks(core, min_tick=1, timeout=1.0):
 
 class TestPlainSignatureHooks:
     @pytest.mark.asyncio
-    async def test_plain_async_hook_runs_on_started_core(self, clean_core):
+    async def test_plain_async_hook_runs_on_started_core(self, started_core):
         """A plain-signature async hook must run and return its result."""
-        core = clean_core
+        core = started_core
         plugin = PlainHookPlugin()
         await core.register_plugin(plugin)
         await _wait_for_ticks(core)
@@ -92,9 +92,9 @@ class TestPlainSignatureHooks:
         assert results == [{"processed": {"x": 1}}]
 
     @pytest.mark.asyncio
-    async def test_plain_sync_hook_runs_on_started_core(self, clean_core):
+    async def test_plain_sync_hook_runs_on_started_core(self, started_core):
         """A plain-signature sync hook must run and return its result."""
-        core = clean_core
+        core = started_core
         plugin = PlainHookPlugin()
         await core.register_plugin(plugin)
         await _wait_for_ticks(core)
@@ -105,9 +105,9 @@ class TestPlainSignatureHooks:
         assert results == [42]
 
     @pytest.mark.asyncio
-    async def test_kwargs_hook_still_receives_tick_context(self, clean_core):
+    async def test_kwargs_hook_still_receives_tick_context(self, started_core):
         """A **kwargs handler keeps receiving _tick_context with the live tick."""
-        core = clean_core
+        core = started_core
         plugin = KwargsHookPlugin()
         await core.register_plugin(plugin)
         await _wait_for_ticks(core)
@@ -121,9 +121,9 @@ class TestPlainSignatureHooks:
         assert "slip" in ctx
 
     @pytest.mark.asyncio
-    async def test_explicit_tick_context_param_receives_it(self, clean_core):
+    async def test_explicit_tick_context_param_receives_it(self, started_core):
         """A handler that names _tick_context explicitly receives it."""
-        core = clean_core
+        core = started_core
         plugin = ExplicitTickContextPlugin()
         await core.register_plugin(plugin)
         await _wait_for_ticks(core)
@@ -137,9 +137,9 @@ class TestPlainSignatureHooks:
 
 class TestHookErrorObservability:
     @pytest.mark.asyncio
-    async def test_failing_hook_emits_hook_error_event(self, clean_core):
+    async def test_failing_hook_emits_hook_error_event(self, started_core):
         """A raising hook isolates to None AND publishes core.hook_error."""
-        core = clean_core
+        core = started_core
         plugin = FailingHookPlugin()
         await core.register_plugin(plugin)
         await _wait_for_ticks(core)
@@ -167,7 +167,7 @@ class TestDecoratorRegistrationCorrectness:
     """Regression tests for decorator discovery bugs (audit H3/H4/H5)."""
 
     @pytest.mark.asyncio
-    async def test_two_event_handlers_same_pattern_both_fire(self, clean_core):
+    async def test_two_event_handlers_same_pattern_both_fire(self, started_core):
         """Two @event methods on the same pattern must both be registered."""
         from uxok import event
 
@@ -185,7 +185,7 @@ class TestDecoratorRegistrationCorrectness:
             async def h2(self, ev):
                 self.b += 1
 
-        core = clean_core
+        core = started_core
         plugin = TwoHandlers()
         await core.register_plugin(plugin)
 
@@ -193,7 +193,7 @@ class TestDecoratorRegistrationCorrectness:
         await wait_until(lambda: plugin.a == 1 and plugin.b == 1)
 
     @pytest.mark.asyncio
-    async def test_multi_hook_decorators_register_both_names(self, clean_core):
+    async def test_multi_hook_decorators_register_both_names(self, started_core):
         """A method with two @hook decorators registers under both names,
         each with its own priority."""
 
@@ -208,7 +208,7 @@ class TestDecoratorRegistrationCorrectness:
                 self.calls.append(data)
                 return data
 
-        core = clean_core
+        core = started_core
         plugin = MultiHook()
         await core.register_plugin(plugin)
         await _wait_for_ticks(core)
@@ -271,9 +271,9 @@ class TestReentrantHookExecution:
     """
 
     @pytest.mark.asyncio
-    async def test_nested_execute_completes_without_deadlock(self, clean_core):
+    async def test_nested_execute_completes_without_deadlock(self, started_core):
         """A hook that awaits core.hooks.execute('inner') must not deadlock."""
-        core = clean_core
+        core = started_core
 
         inner_ran: list[str] = []
         outer_results: list = []
@@ -315,9 +315,9 @@ class TestReentrantHookExecution:
         assert results == ["outer:ping"], "outer hook result incorrect"
 
     @pytest.mark.asyncio
-    async def test_nested_execute_inner_result_visible_to_outer(self, clean_core):
+    async def test_nested_execute_inner_result_visible_to_outer(self, started_core):
         """The outer handler receives the inner result, not an empty list."""
-        core = clean_core
+        core = started_core
 
         class SumPlugin(Plugin):
             def __init__(self):
@@ -371,9 +371,9 @@ class TestUnregisterDuringFiring:
     """
 
     @pytest.mark.asyncio
-    async def test_later_hook_fires_in_round_that_removes_it(self, clean_core):
+    async def test_later_hook_fires_in_round_that_removes_it(self, started_core):
         """The hook removed mid-chain still fires during the triggering execute."""
-        core = clean_core
+        core = started_core
 
         call_log: list[str] = []
 
@@ -412,9 +412,9 @@ class TestUnregisterDuringFiring:
         assert set(results_round1) == {"remover", "victim"}
 
     @pytest.mark.asyncio
-    async def test_removed_hook_absent_in_next_execute(self, clean_core):
+    async def test_removed_hook_absent_in_next_execute(self, started_core):
         """After removal, the second execute does not include the removed hook."""
-        core = clean_core
+        core = started_core
 
         call_log: list[str] = []
 
@@ -463,9 +463,9 @@ class TestSyncHookFailureObservability:
     """Sync counterpart to TestHookErrorObservability (async failing hook)."""
 
     @pytest.mark.asyncio
-    async def test_failing_sync_hook_returns_none_and_emits_hook_error(self, clean_core):
+    async def test_failing_sync_hook_returns_none_and_emits_hook_error(self, started_core):
         """A sync hook that raises must be isolated (None result) and observable."""
-        core = clean_core
+        core = started_core
 
         class FailingSyncPlugin(Plugin):
             def __init__(self):
@@ -501,9 +501,9 @@ class TestHookPriorityOrdering:
     """Hook execution order must be priority DESC, ties in registration order."""
 
     @pytest.mark.asyncio
-    async def test_hooks_execute_in_priority_desc_order(self, clean_core):
+    async def test_hooks_execute_in_priority_desc_order(self, started_core):
         """Higher-priority hooks run before lower-priority hooks."""
-        core = clean_core
+        core = started_core
         order: list[str] = []
 
         class LowPlugin(Plugin):
@@ -541,9 +541,9 @@ class TestHookPriorityOrdering:
         assert order == ["high", "mid", "low"]
 
     @pytest.mark.asyncio
-    async def test_tie_in_priority_preserves_registration_order(self, clean_core):
+    async def test_tie_in_priority_preserves_registration_order(self, started_core):
         """Hooks at the same priority execute in the order they were registered."""
-        core = clean_core
+        core = started_core
         order: list[str] = []
 
         class FirstPlugin(Plugin):
@@ -589,9 +589,9 @@ class TestHookChainErrorIsolation:
     """A single failing hook must not prevent the rest of the chain from running."""
 
     @pytest.mark.asyncio
-    async def test_chain_ok_fail_ok_all_three_run(self, clean_core):
+    async def test_chain_ok_fail_ok_all_three_run(self, started_core):
         """Chain [ok@10, fail@5, ok@0]: all three run; results are [v1, None, v2]."""
-        core = clean_core
+        core = started_core
         ran: list[str] = []
 
         class FirstOkPlugin(Plugin):
@@ -638,9 +638,9 @@ class TestHookChainErrorIsolation:
         assert errors[0].data["error_type"] == "RuntimeError"
 
     @pytest.mark.asyncio
-    async def test_chain_exactly_one_hook_error_emitted(self, clean_core):
+    async def test_chain_exactly_one_hook_error_emitted(self, started_core):
         """Exactly one core.hook_error is emitted when one hook in a chain fails."""
-        core = clean_core
+        core = started_core
 
         class OkPlugin(Plugin):
             def __init__(self):

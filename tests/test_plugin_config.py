@@ -108,6 +108,7 @@ class TestPluginConfig:
     async def test_config_resolution(self, core_kwargs, config_schema, raises_match, expected):
         """plugin.config() resolution and validation across schema/config combinations."""
         core = Core(**core_kwargs)
+        await core.start()
         plugin = make_config_plugin(core, config_schema=config_schema)
 
         if raises_match is not None:
@@ -124,6 +125,7 @@ class TestPluginConfig:
     async def test_config_with_callable_default(self):
         """ConfigField can use callable defaults."""
         core = Core(plugin_configs={"test": {}})
+        await core.start()
         plugin = make_config_plugin(core, config_schema={"items": ConfigField(list, default=[])})
         await core.register_plugin(plugin)
 
@@ -142,6 +144,7 @@ class TestPluginConfig:
                 "plugin2": {"setting": "value2"},
             }
         )
+        await core.start()
 
         plugin1 = make_config_plugin(
             core, name="plugin1", config_schema={"setting": ConfigField(str, REQUIRED)}

@@ -397,6 +397,7 @@ class TestMaxPluginsEnforcement:
         from uxok.errors import PluginError
 
         core = Core(max_plugins=2)
+        await core.start()
         await core.register_plugin(Plugin(name="p_one"))
         await core.register_plugin(Plugin(name="p_two"))
 
@@ -409,6 +410,7 @@ class TestMaxPluginsEnforcement:
         from uxok import Core, Plugin
 
         core = Core(max_plugins=1)
+        await core.start()
         await core.register_plugin(Plugin(name="p_one"))
         await core.unregister_plugin("p_one")
 

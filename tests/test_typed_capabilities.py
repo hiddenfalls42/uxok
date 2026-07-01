@@ -251,49 +251,49 @@ class TestTypedCapabilityRegistration:
     """Tests for registration-time protocol validation."""
 
     @pytest.mark.asyncio
-    async def test_valid_provider_registers(self, clean_core: Core):
+    async def test_valid_provider_registers(self, started_core: Core):
         """Plugin implementing the protocol registers successfully."""
-        result = await clean_core.register_plugin(GreetingsPlugin())
+        result = await started_core.register_plugin(GreetingsPlugin())
         assert result is True
 
     @pytest.mark.asyncio
-    async def test_incomplete_provider_fails(self, clean_core: Core):
+    async def test_incomplete_provider_fails(self, started_core: Core):
         """Plugin missing protocol methods fails at registration."""
         with pytest.raises(PluginError, match="does not implement.*Greeting.*protocol"):
-            await clean_core.register_plugin(IncompleteGreetingsPlugin())
+            await started_core.register_plugin(IncompleteGreetingsPlugin())
 
     @pytest.mark.asyncio
-    async def test_incomplete_provider_error_lists_missing_methods(self, clean_core: Core):
+    async def test_incomplete_provider_error_lists_missing_methods(self, started_core: Core):
         """Error message should list the missing methods."""
         with pytest.raises(PluginError, match="goodbye"):
-            await clean_core.register_plugin(IncompleteGreetingsPlugin())
+            await started_core.register_plugin(IncompleteGreetingsPlugin())
 
     @pytest.mark.asyncio
-    async def test_mixed_provides_registers(self, clean_core: Core):
+    async def test_mixed_provides_registers(self, started_core: Core):
         """Plugin providing both typed and string capabilities registers."""
-        result = await clean_core.register_plugin(MixedProviderPlugin())
+        result = await started_core.register_plugin(MixedProviderPlugin())
         assert result is True
-        caps = await clean_core._capability_system.list_capabilities()
+        caps = await started_core._capability_system.list_capabilities()
         assert "greeting" in caps
         assert "math" in caps
 
     @pytest.mark.asyncio
-    async def test_string_provides_still_works(self, clean_core: Core):
+    async def test_string_provides_still_works(self, started_core: Core):
         """Pure string-based provides still works as before."""
-        result = await clean_core.register_plugin(MathPlugin())
+        result = await started_core.register_plugin(MathPlugin())
         assert result is True
-        caps = await clean_core._capability_system.list_capabilities()
+        caps = await started_core._capability_system.list_capabilities()
         assert "math" in caps
 
     @pytest.mark.asyncio
-    async def test_no_residual_state_on_validation_failure(self, clean_core: Core):
+    async def test_no_residual_state_on_validation_failure(self, started_core: Core):
         """Failed protocol validation should leave no state behind."""
         with pytest.raises(PluginError):
-            await clean_core.register_plugin(IncompleteGreetingsPlugin())
+            await started_core.register_plugin(IncompleteGreetingsPlugin())
 
-        all_plugins = await clean_core._registry.all()
+        all_plugins = await started_core._registry.all()
         assert all_plugins == {}
-        assert await clean_core._capability_system.list_capabilities() == []
+        assert await started_core._capability_system.list_capabilities() == []
 
 
 # ========== Signature Compatibility Tests (Track K) ==========
@@ -399,7 +399,7 @@ class TestSignatureValidationThroughRegistration:
     """Integration: the signature rule fires through register_plugin."""
 
     @pytest.mark.asyncio
-    async def test_incompatible_signature_rejected_at_registration(self, clean_core: Core):
+    async def test_incompatible_signature_rejected_at_registration(self, started_core: Core):
         """A method present but signature-incompatible is rejected (not just missing)."""
 
         class BadSigGreeter(Plugin):
@@ -413,10 +413,10 @@ class TestSignatureValidationThroughRegistration:
                 return "bye"
 
         with pytest.raises(PluginError, match="Incompatible methods.*goodbye"):
-            await clean_core.register_plugin(BadSigGreeter())
+            await started_core.register_plugin(BadSigGreeter())
 
     @pytest.mark.asyncio
-    async def test_kwargs_provider_is_compatible(self, clean_core: Core):
+    async def test_kwargs_provider_is_compatible(self, started_core: Core):
         """A provider using **kwargs satisfies the contract (lenient path)."""
 
         class KwargsGreeter(Plugin):
@@ -429,7 +429,7 @@ class TestSignatureValidationThroughRegistration:
             async def goodbye(self, **kwargs):
                 return "bye"
 
-        assert await clean_core.register_plugin(KwargsGreeter()) is True
+        assert await started_core.register_plugin(KwargsGreeter()) is True
 
 
 # ========== Resolution Tests ==========
@@ -439,47 +439,47 @@ class TestTypedCapabilityResolution:
     """Tests for resolution-time typed capability access."""
 
     @pytest.mark.asyncio
-    async def test_get_capability_with_type(self, clean_core: Core):
+    async def test_get_capability_with_type(self, started_core: Core):
         """get_capability(Greeting) returns the provider."""
         provider = GreetingsPlugin()
-        await clean_core.register_plugin(provider)
+        await started_core.register_plugin(provider)
 
-        result = await clean_core.get_capability(Greeting)
+        result = await started_core.get_capability(Greeting)
         assert result is provider
 
     @pytest.mark.asyncio
-    async def test_get_capability_with_string(self, clean_core: Core):
+    async def test_get_capability_with_string(self, started_core: Core):
         """get_capability("greeting") still works alongside typed provider."""
         provider = GreetingsPlugin()
-        await clean_core.register_plugin(provider)
+        await started_core.register_plugin(provider)
 
-        result = await clean_core.get_capability("greeting")
+        result = await started_core.get_capability("greeting")
         assert result is provider
 
     @pytest.mark.asyncio
-    async def test_plugin_get_capability_with_type(self, clean_core: Core):
+    async def test_plugin_get_capability_with_type(self, started_core: Core):
         """Plugin.get_capability(Greeting) convenience method works."""
         provider = GreetingsPlugin()
         consumer = TypedConsumerPlugin()
 
-        await clean_core.register_plugin(provider)
-        await clean_core.register_plugin(consumer)
+        await started_core.register_plugin(provider)
+        await started_core.register_plugin(consumer)
 
         assert consumer.greet is provider
 
     @pytest.mark.asyncio
-    async def test_string_consumer_with_typed_provider(self, clean_core: Core):
+    async def test_string_consumer_with_typed_provider(self, started_core: Core):
         """String consumer can resolve a typed provider."""
         provider = GreetingsPlugin()
         consumer = StringConsumerPlugin()
 
-        await clean_core.register_plugin(provider)
-        await clean_core.register_plugin(consumer)
+        await started_core.register_plugin(provider)
+        await started_core.register_plugin(consumer)
 
         assert consumer.greet is provider
 
     @pytest.mark.asyncio
-    async def test_typed_consumer_with_string_provider_validates(self, clean_core: Core):
+    async def test_typed_consumer_with_string_provider_validates(self, started_core: Core):
         """Typed resolution validates even when provider used strings."""
 
         class StringProvider(Plugin):
@@ -495,15 +495,15 @@ class TestTypedCapabilityResolution:
                 return f"Goodbye, {name}!"
 
         provider = StringProvider()
-        await clean_core.register_plugin(provider)
+        await started_core.register_plugin(provider)
 
         # Resolution with type validates the provider
-        result = await clean_core.get_capability(Greeting)
+        result = await started_core.get_capability(Greeting)
         assert result is provider
 
     @pytest.mark.asyncio
     async def test_typed_resolution_fails_for_non_conforming_string_provider(
-        self, clean_core: Core
+        self, started_core: Core
     ):
         """Typed resolution catches a string provider that doesn't conform."""
 
@@ -518,16 +518,16 @@ class TestTypedCapabilityResolution:
 
             # Missing goodbye()
 
-        await clean_core.register_plugin(BadProvider())
+        await started_core.register_plugin(BadProvider())
 
         with pytest.raises(PluginError, match="does not implement.*Greeting.*protocol"):
-            await clean_core.get_capability(Greeting)
+            await started_core.get_capability(Greeting)
 
     @pytest.mark.asyncio
-    async def test_missing_typed_capability_raises(self, clean_core: Core):
+    async def test_missing_typed_capability_raises(self, started_core: Core):
         """get_capability(Greeting) raises CapabilityError when not available."""
         with pytest.raises(CapabilityError, match="greeting"):
-            await clean_core.get_capability(Greeting)
+            await started_core.get_capability(Greeting)
 
 
 # ========== Capability Info Introspection Tests ==========
@@ -537,29 +537,29 @@ class TestTypedCapabilityInfo:
     """Tests for get_capability_info with typed capabilities."""
 
     @pytest.mark.asyncio
-    async def test_info_includes_typed_flag(self, clean_core: Core):
+    async def test_info_includes_typed_flag(self, started_core: Core):
         """Capability info should indicate when a protocol is associated."""
-        await clean_core.register_plugin(GreetingsPlugin())
+        await started_core.register_plugin(GreetingsPlugin())
 
-        info = await clean_core._capability_system.get_capability_info("greeting")
+        info = await started_core._capability_system.get_capability_info("greeting")
         assert info is not None
         assert info["typed"] is True
 
     @pytest.mark.asyncio
-    async def test_info_untyped_flag_for_string_only(self, clean_core: Core):
+    async def test_info_untyped_flag_for_string_only(self, started_core: Core):
         """String-only capability should have typed=False."""
-        await clean_core.register_plugin(MathPlugin())
+        await started_core.register_plugin(MathPlugin())
 
-        info = await clean_core._capability_system.get_capability_info("math")
+        info = await started_core._capability_system.get_capability_info("math")
         assert info is not None
         assert info["typed"] is False
 
     @pytest.mark.asyncio
-    async def test_info_includes_protocol_methods(self, clean_core: Core):
+    async def test_info_includes_protocol_methods(self, started_core: Core):
         """Capability info should include protocol method signatures."""
-        await clean_core.register_plugin(GreetingsPlugin())
+        await started_core.register_plugin(GreetingsPlugin())
 
-        info = await clean_core._capability_system.get_capability_info("greeting")
+        info = await started_core._capability_system.get_capability_info("greeting")
         assert "protocol" in info
         assert info["protocol"]["name"] == "Greeting"
 
@@ -568,11 +568,11 @@ class TestTypedCapabilityInfo:
         assert "goodbye" in method_names
 
     @pytest.mark.asyncio
-    async def test_info_no_protocol_for_string_only(self, clean_core: Core):
+    async def test_info_no_protocol_for_string_only(self, started_core: Core):
         """String-only capability should not have a protocol section."""
-        await clean_core.register_plugin(MathPlugin())
+        await started_core.register_plugin(MathPlugin())
 
-        info = await clean_core._capability_system.get_capability_info("math")
+        info = await started_core._capability_system.get_capability_info("math")
         assert "protocol" not in info
 
 
@@ -586,6 +586,7 @@ class TestTypedCapabilityCollisions:
     async def test_error_on_conflict_with_typed(self):
         """Error on conflict policy works with typed capabilities."""
         core = Core(capability_collision="error_on_conflict")
+        await core.start()
 
         class AnotherGreeter(Plugin):
             def __init__(self):
@@ -608,6 +609,7 @@ class TestTypedCapabilityCollisions:
             capability_collision="last_wins_with_warning",
             capability_selection="last_registered",
         )
+        await core.start()
 
         class AnotherGreeter(Plugin):
             def __init__(self):
@@ -636,27 +638,27 @@ class TestTypedCapabilityCleanup:
     """Tests for cleanup of typed capability protocol mappings."""
 
     @pytest.mark.asyncio
-    async def test_unregister_clears_protocol_type(self, clean_core: Core):
+    async def test_unregister_clears_protocol_type(self, started_core: Core):
         """Unregistering last provider clears the protocol type mapping."""
         provider = GreetingsPlugin()
-        await clean_core.register_plugin(provider)
+        await started_core.register_plugin(provider)
 
-        info = await clean_core._capability_system.get_capability_info("greeting")
+        info = await started_core._capability_system.get_capability_info("greeting")
         assert info["typed"] is True
 
-        await clean_core.unregister_plugin(provider.metadata.id)
+        await started_core.unregister_plugin(provider.metadata.id)
 
         # Capability should be gone
-        caps = await clean_core._capability_system.list_capabilities()
+        caps = await started_core._capability_system.list_capabilities()
         assert "greeting" not in caps
 
     @pytest.mark.asyncio
-    async def test_drain_clears_protocol_types(self, clean_core: Core):
+    async def test_drain_clears_protocol_types(self, started_core: Core):
         """Core stop drains protocol type mappings."""
-        await clean_core.register_plugin(GreetingsPlugin())
-        await clean_core.stop()
+        await started_core.register_plugin(GreetingsPlugin())
+        await started_core.stop()
 
-        caps = await clean_core._capability_system.list_capabilities()
+        caps = await started_core._capability_system.list_capabilities()
         assert caps == []
 
 
@@ -670,7 +672,7 @@ class TestCapabilityNameOverride:
         assert derive_capability_name(CustomNamed) == "custom_name"
 
     @pytest.mark.asyncio
-    async def test_override_used_in_registration(self, clean_core: Core):
+    async def test_override_used_in_registration(self, started_core: Core):
         """Plugins using protocols with __capability_name__ register under that name."""
 
         @runtime_checkable
@@ -686,11 +688,11 @@ class TestCapabilityNameOverride:
             async def run(self):
                 pass
 
-        await clean_core.register_plugin(ThingPlugin())
-        caps = await clean_core._capability_system.list_capabilities()
+        await started_core.register_plugin(ThingPlugin())
+        caps = await started_core._capability_system.list_capabilities()
         assert "special_service" in caps
 
-        result = await clean_core.get_capability("special_service")
+        result = await started_core.get_capability("special_service")
         assert result is not None
 
 

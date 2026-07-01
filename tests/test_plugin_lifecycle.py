@@ -13,9 +13,9 @@ from uxok.protocols import Event
 
 class TestPluginLifecycle:
     @pytest.mark.asyncio
-    async def test_start_idempotent(self, clean_core: Core):
+    async def test_start_idempotent(self, started_core: Core):
         p = Plugin(name="idem_test")
-        await clean_core.register_plugin(p)
+        await started_core.register_plugin(p)
         await p.start()  # Already started — should be no-op
 
     @pytest.mark.asyncio
@@ -32,7 +32,7 @@ class TestPluginLifecycle:
             await p.start()
 
     @pytest.mark.asyncio
-    async def test_stop_error_in_on_stop_handled(self, clean_core: Core):
+    async def test_stop_error_in_on_stop_handled(self, started_core: Core):
         class CrashPlugin(Plugin):
             def __init__(self):
                 super().__init__(name="crash_plugin")
@@ -41,14 +41,14 @@ class TestPluginLifecycle:
                 raise RuntimeError("crash on stop")
 
         p = CrashPlugin()
-        await clean_core.register_plugin(p)
+        await started_core.register_plugin(p)
         # Should not raise
-        await clean_core.unregister_plugin(p.metadata.name)
+        await started_core.unregister_plugin(p.metadata.name)
 
 
 class TestPluginHookRegistration:
     @pytest.mark.asyncio
-    async def test_start_registers_decorated_hooks(self, clean_core: Core):
+    async def test_start_registers_decorated_hooks(self, started_core: Core):
         class HookPlugin(Plugin):
             def __init__(self):
                 super().__init__(name="hook_plugin")
@@ -58,9 +58,9 @@ class TestPluginHookRegistration:
                 return data
 
         p = HookPlugin()
-        await clean_core.register_plugin(p)
+        await started_core.register_plugin(p)
 
-        hooks = await clean_core.hooks.get_hooks("data.process")
+        hooks = await started_core.hooks.get_hooks("data.process")
         assert len(hooks) == 1
         priority, hook_obj = hooks[0]
         assert priority == 7
@@ -76,26 +76,26 @@ class TestPluginConvenience:
         assert p.config("nonexistent", "default") == "default"
 
     @pytest.mark.asyncio
-    async def test_emit(self, clean_core: Core):
+    async def test_emit(self, started_core: Core):
         p = Plugin(name="emitter")
-        await clean_core.register_plugin(p)
+        await started_core.register_plugin(p)
 
         received = []
 
         async def handler(event):
             received.append(event.name)
 
-        await clean_core.events.subscribe("test_event", handler)
+        await started_core.events.subscribe("test_event", handler)
         await p.emit("test_event", {"data": True})
         await asyncio.sleep(0.005)
         assert "test_event" in received
 
     @pytest.mark.asyncio
-    async def test_get_capability(self, clean_core: Core):
+    async def test_get_capability(self, started_core: Core):
         provider = Plugin(name="provider", provides={"storage"})
         consumer = Plugin(name="consumer", requires={"storage"})
-        await clean_core.register_plugin(provider)
-        await clean_core.register_plugin(consumer)
+        await started_core.register_plugin(provider)
+        await started_core.register_plugin(consumer)
         assert await consumer.get_capability("storage") is provider
 
     @pytest.mark.asyncio
@@ -282,7 +282,7 @@ class TestPluginMetadataHooksEvents:
         assert plugin.metadata.events_published == frozenset()
 
     @pytest.mark.asyncio
-    async def test_plugin_with_hooks_consumed_events_published_in_proxy(self, clean_core: Core):
+    async def test_plugin_with_hooks_consumed_events_published_in_proxy(self, started_core: Core):
         """Test that hooks_consumed and events_published are properly exposed in proxy."""
 
         class DataProcessor(Plugin):
@@ -296,16 +296,16 @@ class TestPluginMetadataHooksEvents:
                 )
 
         plugin = DataProcessor()
-        await clean_core.register_plugin(plugin)
+        await started_core.register_plugin(plugin)
 
-        plugins = await clean_core.list()
+        plugins = await started_core.list()
         proxy = plugins[0]
 
         assert set(proxy.hooks_consumed) == {"data.validate", "data.transform"}
         assert set(proxy.events_published) == {"data.processed", "data.error"}
 
     @pytest.mark.asyncio
-    async def test_hook_consumes_filter_with_declarative_metadata(self, clean_core: Core):
+    async def test_hook_consumes_filter_with_declarative_metadata(self, started_core: Core):
         """Test .hook.consumes() returns plugins with hooks_consumed metadata."""
 
         class HookConsumer(Plugin):
@@ -319,10 +319,10 @@ class TestPluginMetadataHooksEvents:
         consumer = HookConsumer()
         provider = HookProvider()
 
-        await clean_core.register_plugin(consumer)
-        await clean_core.register_plugin(provider)
+        await started_core.register_plugin(consumer)
+        await started_core.register_plugin(provider)
 
-        plugins = await clean_core.list()
+        plugins = await started_core.list()
 
         # Filter by hook consumed
         consumers = plugins.hook.consumes("data.validate")
@@ -330,7 +330,7 @@ class TestPluginMetadataHooksEvents:
         assert consumers[0].name == "consumer"
 
     @pytest.mark.asyncio
-    async def test_event_provides_filter_with_declarative_metadata(self, clean_core: Core):
+    async def test_event_provides_filter_with_declarative_metadata(self, started_core: Core):
         """Test .event.provides() returns plugins with events_published metadata."""
 
         class EventPublisher(Plugin):
@@ -344,10 +344,10 @@ class TestPluginMetadataHooksEvents:
         publisher = EventPublisher()
         subscriber = EventSubscriber()
 
-        await clean_core.register_plugin(publisher)
-        await clean_core.register_plugin(subscriber)
+        await started_core.register_plugin(publisher)
+        await started_core.register_plugin(subscriber)
 
-        plugins = await clean_core.list()
+        plugins = await started_core.list()
 
         # Filter by event published
         publishers = plugins.event.provides("user.login")

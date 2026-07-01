@@ -31,6 +31,7 @@ _GRUMPY = Path(__file__).resolve().parents[1] / "examples" / "example_host" / "g
 async def core(request):
     """A fresh core under each capability_access mode, with guaranteed cleanup."""
     c = Core(capability_access=request.param)
+    await c.start()
     try:
         yield c
     finally:

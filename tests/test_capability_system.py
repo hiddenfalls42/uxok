@@ -28,14 +28,14 @@ class TestCapabilitySystem:
     """Test capability system core functionality."""
 
     @pytest.mark.asyncio
-    async def test_get_capability_success(self, clean_core: Core):
+    async def test_get_capability_success(self, started_core: Core):
         """Test successful capability resolution."""
         # Register provider
         provider = MockCapabilityPlugin(name="provider", provides={"test_cap"})
-        await clean_core.register_plugin(provider)
+        await started_core.register_plugin(provider)
 
         # Get capability
-        result = await clean_core.get_capability("test_cap")
+        result = await started_core.get_capability("test_cap")
         assert result is provider
 
     @pytest.mark.asyncio
@@ -49,27 +49,27 @@ class TestCapabilitySystem:
         assert "Available capabilities:" not in str(exc_info.value)
 
     @pytest.mark.asyncio
-    async def test_list_capabilities(self, clean_core: Core):
+    async def test_list_capabilities(self, started_core: Core):
         """Test listing available capabilities."""
         # Initially empty
-        capabilities = await clean_core._capability_system.list_capabilities()
+        capabilities = await started_core._capability_system.list_capabilities()
         assert capabilities == []
 
         # Register provider
         provider = MockCapabilityPlugin(name="provider", provides={"cap1", "cap2"})
-        await clean_core.register_plugin(provider)
+        await started_core.register_plugin(provider)
 
-        capabilities = await clean_core._capability_system.list_capabilities()
+        capabilities = await started_core._capability_system.list_capabilities()
         assert set(capabilities) == {"cap1", "cap2"}
 
     @pytest.mark.asyncio
-    async def test_get_capability_info(self, clean_core: Core):
+    async def test_get_capability_info(self, started_core: Core):
         """Test getting capability information."""
         # Register provider
         provider = MockCapabilityPlugin(name="provider", provides={"test_cap"})
-        await clean_core.register_plugin(provider)
+        await started_core.register_plugin(provider)
 
-        info = await clean_core._capability_system.get_capability_info("test_cap")
+        info = await started_core._capability_system.get_capability_info("test_cap")
         assert info is not None
         assert info["name"] == "test_cap"
         assert info["selected_provider"] == "provider"
@@ -79,7 +79,7 @@ class TestCapabilitySystem:
         assert len(info["all_providers"]) == 1
 
         # Missing capability
-        info = await clean_core._capability_system.get_capability_info("missing")
+        info = await started_core._capability_system.get_capability_info("missing")
         assert info is None
 
 
@@ -91,15 +91,20 @@ class TestCapabilityCollisionPolicies:
         """Test error_on_conflict collision policy."""
         core = Core(capability_collision="error_on_conflict")
 
-        # Register first provider
-        provider1 = MockCapabilityPlugin(name="provider1", provides={"shared_cap"})
-        result1 = await core.register_plugin(provider1)
-        assert result1 is True
+        try:
+            await core.start()
+            # Register first provider
+            provider1 = MockCapabilityPlugin(name="provider1", provides={"shared_cap"})
+            result1 = await core.register_plugin(provider1)
+            assert result1 is True
 
-        # Second provider should fail with explicit error_on_conflict
-        provider2 = MockCapabilityPlugin(name="provider2", provides={"shared_cap"})
-        with pytest.raises(PluginError):
-            await core.register_plugin(provider2)
+            # Second provider should fail with explicit error_on_conflict
+            provider2 = MockCapabilityPlugin(name="provider2", provides={"shared_cap"})
+            with pytest.raises(PluginError):
+                await core.register_plugin(provider2)
+        finally:
+            if core.state.name == "RUNNING":
+                await core.stop()
 
     @pytest.mark.asyncio
     async def test_last_wins_with_warning_policy(self):
@@ -109,34 +114,44 @@ class TestCapabilityCollisionPolicies:
             capability_selection="last_registered",
         )
 
-        # Register first provider
-        provider1 = MockCapabilityPlugin(name="provider1", provides={"shared_cap"})
-        await core.register_plugin(provider1)
+        try:
+            await core.start()
+            # Register first provider
+            provider1 = MockCapabilityPlugin(name="provider1", provides={"shared_cap"})
+            await core.register_plugin(provider1)
 
-        # Second provider should succeed with warning
-        provider2 = MockCapabilityPlugin(name="provider2", provides={"shared_cap"})
-        await core.register_plugin(provider2)
+            # Second provider should succeed with warning
+            provider2 = MockCapabilityPlugin(name="provider2", provides={"shared_cap"})
+            await core.register_plugin(provider2)
 
-        # Last provider should be returned
-        result = await core.get_capability("shared_cap")
-        assert result is provider2
+            # Last provider should be returned
+            result = await core.get_capability("shared_cap")
+            assert result is provider2
+        finally:
+            if core.state.name == "RUNNING":
+                await core.stop()
 
     @pytest.mark.asyncio
     async def test_first_wins_policy(self):
         """Test first_wins collision policy."""
         core = Core(capability_collision="first_wins")
 
-        # Register first provider
-        provider1 = MockCapabilityPlugin(name="provider1", provides={"shared_cap"})
-        await core.register_plugin(provider1)
+        try:
+            await core.start()
+            # Register first provider
+            provider1 = MockCapabilityPlugin(name="provider1", provides={"shared_cap"})
+            await core.register_plugin(provider1)
 
-        # Second provider should succeed but not override
-        provider2 = MockCapabilityPlugin(name="provider2", provides={"shared_cap"})
-        await core.register_plugin(provider2)
+            # Second provider should succeed but not override
+            provider2 = MockCapabilityPlugin(name="provider2", provides={"shared_cap"})
+            await core.register_plugin(provider2)
 
-        # First provider should still be returned
-        result = await core.get_capability("shared_cap")
-        assert result is provider1
+            # First provider should still be returned
+            result = await core.get_capability("shared_cap")
+            assert result is provider1
+        finally:
+            if core.state.name == "RUNNING":
+                await core.stop()
 
 
 class TestCapabilityMissingPolicies:
@@ -164,19 +179,19 @@ class TestCommitOnlyRegistration:
 
     @pytest.mark.asyncio
     async def test_register_missing_dependency_raises_capability_error_and_leaves_no_state(
-        self, clean_core: Core
+        self, started_core: Core
     ):
         """Registration with missing capability should raise and leave no residue."""
         consumer = MockCapabilityPlugin(name="consumer", requires={"missing_cap"})
         with pytest.raises(CapabilityError):
-            await clean_core.register_plugin(consumer)
+            await started_core.register_plugin(consumer)
 
-        all_plugins = await clean_core._registry.all()
+        all_plugins = await started_core._registry.all()
         assert all_plugins == {}
-        assert await clean_core._capability_system.list_capabilities() == []
+        assert await started_core._capability_system.list_capabilities() == []
 
     @pytest.mark.asyncio
-    async def test_register_failure_on_start_leaves_no_state(self, clean_core: Core):
+    async def test_register_failure_on_start_leaves_no_state(self, started_core: Core):
         """Registration failing during on_start should leave no hooks/caps/registry entries."""
 
         class FailingPlugin(MockCapabilityPlugin):
@@ -187,28 +202,28 @@ class TestCommitOnlyRegistration:
                 raise RuntimeError("boom")
 
         with pytest.raises(RuntimeError):
-            await clean_core.register_plugin(FailingPlugin())
+            await started_core.register_plugin(FailingPlugin())
 
         # No plugin in registry
-        all_plugins = await clean_core._registry.all()
+        all_plugins = await started_core._registry.all()
         assert all_plugins == {}
         # No capabilities exposed
-        assert "failcap" not in await clean_core._capability_system.list_capabilities()
+        assert "failcap" not in await started_core._capability_system.list_capabilities()
 
 
 class TestPluginCapabilityConvenience:
     """Test plugin convenience methods for capabilities."""
 
     @pytest.mark.asyncio
-    async def test_plugin_get_capability(self, clean_core: Core):
+    async def test_plugin_get_capability(self, started_core: Core):
         """Test plugin.get_capability convenience method."""
         # Register provider
         provider = MockCapabilityPlugin(name="provider", provides={"test_cap"})
-        await clean_core.register_plugin(provider)
+        await started_core.register_plugin(provider)
 
         # Create consumer plugin
         consumer = MockCapabilityPlugin(name="consumer", requires={"test_cap"})
-        await clean_core.register_plugin(consumer)
+        await started_core.register_plugin(consumer)
 
         # Test convenience method
         result = await consumer.get_capability("test_cap")
@@ -273,19 +288,24 @@ class TestCapabilityCleanup:
         """Test capabilities are cleaned up during core shutdown."""
         core = Core()
 
-        # Register provider
-        provider = MockCapabilityPlugin(name="provider", provides={"test_cap"})
-        await core.register_plugin(provider)
+        try:
+            await core.start()
+            # Register provider
+            provider = MockCapabilityPlugin(name="provider", provides={"test_cap"})
+            await core.register_plugin(provider)
 
-        # Capability should be available
-        capabilities = await core._capability_system.list_capabilities()
-        assert "test_cap" in capabilities
+            # Capability should be available
+            capabilities = await core._capability_system.list_capabilities()
+            assert "test_cap" in capabilities
 
-        # Stop core
-        await core.stop()
+            # Stop core
+            await core.stop()
 
-        # Create new core and check capabilities are gone
-        # (Note: This tests that the capability system drains properly)
-        core2 = Core()
-        capabilities = await core2._capability_system.list_capabilities()
-        assert "test_cap" not in capabilities
+            # Create new core and check capabilities are gone
+            # (Note: This tests that the capability system drains properly)
+            core2 = Core()
+            capabilities = await core2._capability_system.list_capabilities()
+            assert "test_cap" not in capabilities
+        finally:
+            if core.state.name == "RUNNING":
+                await core.stop()

@@ -95,54 +95,54 @@ class TestEafpHeldRef:
     """
 
     @pytest.mark.asyncio
-    async def test_uptime_on_stale_view_raises_stale_plugin_error(self, clean_core):
+    async def test_uptime_on_stale_view_raises_stale_plugin_error(self, started_core):
         """uptime() raises StalePluginError after unregister, even with a live object ref."""
         plugin = Plugin(name="ephemeral")  # strong ref held
-        await clean_core.register_plugin(plugin)
-        view = (await clean_core.list()).by_name("ephemeral")
+        await started_core.register_plugin(plugin)
+        view = (await started_core.list()).by_name("ephemeral")
 
-        await clean_core.unregister_plugin("ephemeral")
+        await started_core.unregister_plugin("ephemeral")
 
         with pytest.raises(StalePluginError):
             await view.uptime()
 
     @pytest.mark.asyncio
-    async def test_methods_on_stale_view_raises_stale_plugin_error(self, clean_core):
+    async def test_methods_on_stale_view_raises_stale_plugin_error(self, started_core):
         """methods() raises StalePluginError after unregister, even with a live object ref."""
         plugin = Plugin(name="fleeting")  # strong ref held
-        await clean_core.register_plugin(plugin)
-        view = (await clean_core.list()).by_name("fleeting")
+        await started_core.register_plugin(plugin)
+        view = (await started_core.list()).by_name("fleeting")
 
-        await clean_core.unregister_plugin("fleeting")
+        await started_core.unregister_plugin("fleeting")
 
         with pytest.raises(StalePluginError):
             await view.methods()
 
     @pytest.mark.asyncio
-    async def test_status_returns_stopped_when_plugin_unregistered(self, clean_core):
+    async def test_status_returns_stopped_when_plugin_unregistered(self, started_core):
         """status is 'stopped' after unregister (via live _shutdown flag), not a stale snapshot."""
-        await clean_core.register_plugin(Plugin(name="transient"))
+        await started_core.register_plugin(Plugin(name="transient"))
         # Keep a reference to the plugin so the weakref stays alive — the _shutdown
         # flag path is enough to exercise this without requiring a GC cycle.
-        view = (await clean_core.list()).by_name("transient")
+        view = (await started_core.list()).by_name("transient")
 
         assert view.status == "active"
 
-        await clean_core.unregister_plugin("transient")
+        await started_core.unregister_plugin("transient")
 
         # status resolves live from the _shutdown flag — returns "stopped" even
         # though the plugin object is still in memory
         assert view.status == "stopped"
 
     @pytest.mark.asyncio
-    async def test_ready_is_false_after_unregister(self, clean_core):
+    async def test_ready_is_false_after_unregister(self, started_core):
         """ready is False once the plugin has been stopped/unregistered."""
-        await clean_core.register_plugin(Plugin(name="short_lived"))
-        view = (await clean_core.list()).by_name("short_lived")
+        await started_core.register_plugin(Plugin(name="short_lived"))
+        view = (await started_core.list()).by_name("short_lived")
 
         assert view.ready is True
 
-        await clean_core.unregister_plugin("short_lived")
+        await started_core.unregister_plugin("short_lived")
 
         assert view.ready is False
 
@@ -156,38 +156,38 @@ class TestLiveStatus:
     """status/ready reflect the live instance, not frozen snapshot values."""
 
     @pytest.mark.asyncio
-    async def test_status_tracks_lifecycle_active(self, clean_core):
+    async def test_status_tracks_lifecycle_active(self, started_core):
         """A view fetched post-start reports 'active'."""
-        await clean_core.register_plugin(Plugin(name="tracked"))
-        view = (await clean_core.list()).by_name("tracked")
+        await started_core.register_plugin(Plugin(name="tracked"))
+        view = (await started_core.list()).by_name("tracked")
 
         assert view.status == "active"
         assert view.ready is True
 
     @pytest.mark.asyncio
-    async def test_status_changes_to_stopped_after_unregister(self, clean_core):
+    async def test_status_changes_to_stopped_after_unregister(self, started_core):
         """status changes from 'active' to 'stopped' after unregister without refetch."""
-        await clean_core.register_plugin(Plugin(name="mutable_state"))
-        view = (await clean_core.list()).by_name("mutable_state")
+        await started_core.register_plugin(Plugin(name="mutable_state"))
+        view = (await started_core.list()).by_name("mutable_state")
 
         assert view.status == "active"
 
-        await clean_core.unregister_plugin("mutable_state")
+        await started_core.unregister_plugin("mutable_state")
 
         # Same view object, live resolution
         assert view.status == "stopped"
         assert view.ready is False
 
     @pytest.mark.asyncio
-    async def test_status_is_active_during_registration(self, clean_core):
+    async def test_status_is_active_during_registration(self, started_core):
         """Status reports 'active' immediately after register_plugin (not 'created')."""
 
         class WatchedPlugin(Plugin):
             def __init__(self):
                 super().__init__(name="watched")
 
-        await clean_core.register_plugin(WatchedPlugin())
-        view = (await clean_core.list()).by_name("watched")
+        await started_core.register_plugin(WatchedPlugin())
+        view = (await started_core.list()).by_name("watched")
 
         # register_plugin calls start() internally — so status is already "active"
         assert view.status == "active"
@@ -202,10 +202,10 @@ class TestViewMethods:
     """view.methods() returns the plugin's own public methods, excluding Plugin base methods."""
 
     @pytest.mark.asyncio
-    async def test_methods_returns_own_public_methods(self, clean_core):
+    async def test_methods_returns_own_public_methods(self, started_core):
         """methods() returns a list of dicts for concrete plugin's own public methods."""
-        await clean_core.register_plugin(MethodsPlugin())
-        view = (await clean_core.list()).by_name("methods_plugin")
+        await started_core.register_plugin(MethodsPlugin())
+        view = (await started_core.list()).by_name("methods_plugin")
 
         result = await view.methods()
         assert isinstance(result, list)
@@ -215,10 +215,10 @@ class TestViewMethods:
         assert "public_async" in method_names
 
     @pytest.mark.asyncio
-    async def test_methods_excludes_plugin_base_methods(self, clean_core):
+    async def test_methods_excludes_plugin_base_methods(self, started_core):
         """methods() excludes Plugin base-class methods (emit, config, hook, etc.)."""
-        await clean_core.register_plugin(MethodsPlugin())
-        view = (await clean_core.list()).by_name("methods_plugin")
+        await started_core.register_plugin(MethodsPlugin())
+        view = (await started_core.list()).by_name("methods_plugin")
 
         result = await view.methods()
         method_names = {m["name"] for m in result}
@@ -229,10 +229,10 @@ class TestViewMethods:
         )
 
     @pytest.mark.asyncio
-    async def test_methods_excludes_private_methods(self, clean_core):
+    async def test_methods_excludes_private_methods(self, started_core):
         """methods() excludes private methods (names starting with _)."""
-        await clean_core.register_plugin(MethodsPlugin())
-        view = (await clean_core.list()).by_name("methods_plugin")
+        await started_core.register_plugin(MethodsPlugin())
+        view = (await started_core.list()).by_name("methods_plugin")
 
         result = await view.methods()
         method_names = {m["name"] for m in result}
@@ -240,10 +240,10 @@ class TestViewMethods:
         assert "_private_method" not in method_names
 
     @pytest.mark.asyncio
-    async def test_methods_dict_shape(self, clean_core):
+    async def test_methods_dict_shape(self, started_core):
         """Each entry in methods() has name, signature, parameters, return_annotation, doc."""
-        await clean_core.register_plugin(MethodsPlugin())
-        view = (await clean_core.list()).by_name("methods_plugin")
+        await started_core.register_plugin(MethodsPlugin())
+        view = (await started_core.list()).by_name("methods_plugin")
 
         result = await view.methods()
         assert len(result) >= 1
@@ -256,10 +256,10 @@ class TestViewMethods:
             assert "doc" in entry
 
     @pytest.mark.asyncio
-    async def test_methods_captures_parameter_names(self, clean_core):
+    async def test_methods_captures_parameter_names(self, started_core):
         """Parameter names for a known method are correctly captured."""
-        await clean_core.register_plugin(MethodsPlugin())
-        view = (await clean_core.list()).by_name("methods_plugin")
+        await started_core.register_plugin(MethodsPlugin())
+        view = (await started_core.list()).by_name("methods_plugin")
 
         result = await view.methods()
         sync_entry = next(m for m in result if m["name"] == "public_sync")
@@ -269,24 +269,24 @@ class TestViewMethods:
         assert "y" in param_names
 
     @pytest.mark.asyncio
-    async def test_methods_empty_for_base_only_plugin(self, clean_core):
+    async def test_methods_empty_for_base_only_plugin(self, started_core):
         """A plugin with no own public methods returns an empty list from methods()."""
 
         class BarePlugin(Plugin):
             def __init__(self):
                 super().__init__(name="bare")
 
-        await clean_core.register_plugin(BarePlugin())
-        view = (await clean_core.list()).by_name("bare")
+        await started_core.register_plugin(BarePlugin())
+        view = (await started_core.list()).by_name("bare")
 
         result = await view.methods()
         assert result == []
 
     @pytest.mark.asyncio
-    async def test_methods_includes_greeter_protocol_methods(self, clean_core):
+    async def test_methods_includes_greeter_protocol_methods(self, started_core):
         """Typed-capability protocol methods appear in methods() for a compliant plugin."""
-        await clean_core.register_plugin(GreeterPlugin())
-        view = (await clean_core.list()).by_name("greeter")
+        await started_core.register_plugin(GreeterPlugin())
+        view = (await started_core.list()).by_name("greeter")
 
         result = await view.methods()
         method_names = {m["name"] for m in result}
@@ -305,10 +305,10 @@ class TestCapabilityInfo:
     """collection.capability.info() returns CapabilityInfo with protocol details."""
 
     @pytest.mark.asyncio
-    async def test_info_typed_capability_returns_capability_info(self, clean_core):
+    async def test_info_typed_capability_returns_capability_info(self, started_core):
         """info(name) returns a CapabilityInfo for a typed capability."""
-        await clean_core.register_plugin(GreeterPlugin())
-        collection = await clean_core.list()
+        await started_core.register_plugin(GreeterPlugin())
+        collection = await started_core.list()
 
         info = collection.capability.info("greeter")
 
@@ -316,10 +316,10 @@ class TestCapabilityInfo:
         assert isinstance(info, CapabilityInfo)
 
     @pytest.mark.asyncio
-    async def test_info_typed_capability_has_typed_true(self, clean_core):
+    async def test_info_typed_capability_has_typed_true(self, started_core):
         """typed=True for a protocol-backed capability."""
-        await clean_core.register_plugin(GreeterPlugin())
-        collection = await clean_core.list()
+        await started_core.register_plugin(GreeterPlugin())
+        collection = await started_core.list()
 
         info = collection.capability.info("greeter")
 
@@ -327,10 +327,10 @@ class TestCapabilityInfo:
         assert info.typed is True
 
     @pytest.mark.asyncio
-    async def test_info_typed_capability_has_protocol_name(self, clean_core):
+    async def test_info_typed_capability_has_protocol_name(self, started_core):
         """protocol_name is set to the Protocol class name for a typed capability."""
-        await clean_core.register_plugin(GreeterPlugin())
-        collection = await clean_core.list()
+        await started_core.register_plugin(GreeterPlugin())
+        collection = await started_core.list()
 
         info = collection.capability.info("greeter")
 
@@ -338,10 +338,10 @@ class TestCapabilityInfo:
         assert info.protocol_name == "Greeter"
 
     @pytest.mark.asyncio
-    async def test_info_typed_capability_has_protocol_methods(self, clean_core):
+    async def test_info_typed_capability_has_protocol_methods(self, started_core):
         """protocol_methods contains the Protocol's method signatures."""
-        await clean_core.register_plugin(GreeterPlugin())
-        collection = await clean_core.list()
+        await started_core.register_plugin(GreeterPlugin())
+        collection = await started_core.list()
 
         info = collection.capability.info("greeter")
 
@@ -352,10 +352,10 @@ class TestCapabilityInfo:
         assert "goodbye" in method_names
 
     @pytest.mark.asyncio
-    async def test_info_untyped_capability_has_typed_false(self, clean_core):
+    async def test_info_untyped_capability_has_typed_false(self, started_core):
         """typed=False for a string-only capability."""
-        await clean_core.register_plugin(UntypedPlugin())
-        collection = await clean_core.list()
+        await started_core.register_plugin(UntypedPlugin())
+        collection = await started_core.list()
 
         info = collection.capability.info("storage")
 
@@ -363,10 +363,10 @@ class TestCapabilityInfo:
         assert info.typed is False
 
     @pytest.mark.asyncio
-    async def test_info_untyped_capability_has_empty_protocol_fields(self, clean_core):
+    async def test_info_untyped_capability_has_empty_protocol_fields(self, started_core):
         """protocol_name and protocol_methods are empty for untyped capabilities."""
-        await clean_core.register_plugin(UntypedPlugin())
-        collection = await clean_core.list()
+        await started_core.register_plugin(UntypedPlugin())
+        collection = await started_core.list()
 
         info = collection.capability.info("storage")
 
@@ -375,35 +375,35 @@ class TestCapabilityInfo:
         assert info.protocol_methods == []
 
     @pytest.mark.asyncio
-    async def test_info_unknown_capability_returns_none(self, clean_core):
+    async def test_info_unknown_capability_returns_none(self, started_core):
         """info() returns None for a name that is not a registered capability."""
-        await clean_core.register_plugin(Plugin(name="empty"))
-        collection = await clean_core.list()
+        await started_core.register_plugin(Plugin(name="empty"))
+        collection = await started_core.list()
 
         assert collection.capability.info("nonexistent_capability_xyz") is None
 
     @pytest.mark.asyncio
-    async def test_info_via_hook_filter_returns_none(self, clean_core):
+    async def test_info_via_hook_filter_returns_none(self, started_core):
         """collection.hook.info() always returns None (capability filter only)."""
-        await clean_core.register_plugin(GreeterPlugin())
-        collection = await clean_core.list()
+        await started_core.register_plugin(GreeterPlugin())
+        collection = await started_core.list()
 
         # hook filter does not support info()
         assert collection.hook.info("greeter") is None
 
     @pytest.mark.asyncio
-    async def test_info_via_event_filter_returns_none(self, clean_core):
+    async def test_info_via_event_filter_returns_none(self, started_core):
         """collection.event.info() always returns None (capability filter only)."""
-        await clean_core.register_plugin(GreeterPlugin())
-        collection = await clean_core.list()
+        await started_core.register_plugin(GreeterPlugin())
+        collection = await started_core.list()
 
         assert collection.event.info("greeter") is None
 
     @pytest.mark.asyncio
-    async def test_info_providers_list(self, clean_core):
+    async def test_info_providers_list(self, started_core):
         """info.providers contains at least one provider descriptor for a registered capability."""
-        await clean_core.register_plugin(GreeterPlugin())
-        collection = await clean_core.list()
+        await started_core.register_plugin(GreeterPlugin())
+        collection = await started_core.list()
 
         info = collection.capability.info("greeter")
 
@@ -416,10 +416,10 @@ class TestCapabilityInfo:
         assert "id" in provider
 
     @pytest.mark.asyncio
-    async def test_info_selected_provider(self, clean_core):
+    async def test_info_selected_provider(self, started_core):
         """selected_provider names the currently selected capability provider."""
-        await clean_core.register_plugin(GreeterPlugin())
-        collection = await clean_core.list()
+        await started_core.register_plugin(GreeterPlugin())
+        collection = await started_core.list()
 
         info = collection.capability.info("greeter")
 
@@ -427,10 +427,10 @@ class TestCapabilityInfo:
         assert info.selected_provider == "greeter"
 
     @pytest.mark.asyncio
-    async def test_info_capability_name_field(self, clean_core):
+    async def test_info_capability_name_field(self, started_core):
         """info.name matches the capability name that was looked up."""
-        await clean_core.register_plugin(GreeterPlugin())
-        collection = await clean_core.list()
+        await started_core.register_plugin(GreeterPlugin())
+        collection = await started_core.list()
 
         info = collection.capability.info("greeter")
 
@@ -438,15 +438,15 @@ class TestCapabilityInfo:
         assert info.name == "greeter"
 
     @pytest.mark.asyncio
-    async def test_info_refreshed_after_register(self, clean_core):
+    async def test_info_refreshed_after_register(self, started_core):
         """After a new register, a fresh list() reflects the newly added capability."""
-        await clean_core.register_plugin(Plugin(name="placeholder"))
-        collection = await clean_core.list()
+        await started_core.register_plugin(Plugin(name="placeholder"))
+        collection = await started_core.list()
 
         assert collection.capability.info("storage") is None
 
-        await clean_core.register_plugin(UntypedPlugin())
-        fresh_collection = await clean_core.list()
+        await started_core.register_plugin(UntypedPlugin())
+        fresh_collection = await started_core.list()
 
         assert fresh_collection.capability.info("storage") is not None
 
@@ -455,21 +455,21 @@ class TestPluginViewTags:
     """The descriptive snapshot surfaces the plugin's declared tags."""
 
     @pytest.mark.asyncio
-    async def test_view_exposes_declared_tags(self, clean_core):
+    async def test_view_exposes_declared_tags(self, started_core):
         """A plugin's tags are copied onto its PluginView at collection-build time."""
-        await clean_core.register_plugin(Plugin(name="tagged", tags={"local", "fast"}))
+        await started_core.register_plugin(Plugin(name="tagged", tags={"local", "fast"}))
 
-        view = (await clean_core.list()).by_name("tagged")
+        view = (await started_core.list()).by_name("tagged")
 
         assert view is not None
         assert view.tags == {"local", "fast"}
 
     @pytest.mark.asyncio
-    async def test_view_tags_default_empty(self, clean_core):
+    async def test_view_tags_default_empty(self, started_core):
         """A plugin that declares no tags exposes an empty set, not None."""
-        await clean_core.register_plugin(Plugin(name="untagged"))
+        await started_core.register_plugin(Plugin(name="untagged"))
 
-        view = (await clean_core.list()).by_name("untagged")
+        view = (await started_core.list()).by_name("untagged")
 
         assert view is not None
         assert view.tags == set()

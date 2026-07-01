@@ -54,7 +54,7 @@ class TestPluginViewBasic:
     """Basic unit tests for PluginView functionality."""
 
     @pytest_asyncio.fixture
-    async def core_and_plugin(self, clean_core):
+    async def core_and_plugin(self, started_core):
         """Create a core with a test plugin for testing."""
 
         class ProxiedPlugin(Plugin):
@@ -62,8 +62,8 @@ class TestPluginViewBasic:
                 super().__init__(name="test_plugin", version="1.0.0", provides={"test_cap"})
 
         plugin = ProxiedPlugin()
-        await clean_core.register_plugin(plugin)
-        return clean_core, plugin
+        await started_core.register_plugin(plugin)
+        return started_core, plugin
 
     @pytest.mark.asyncio
     async def test_plugin_view_creation(self, core_and_plugin):
@@ -191,7 +191,7 @@ class TestPluginViewCollectionOperations:
     """Tests for PluginCollection operations with PluginView."""
 
     @pytest_asyncio.fixture
-    async def core_with_plugins(self, clean_core):
+    async def core_with_plugins(self, started_core):
         """Create a core with multiple test plugins."""
 
         class StoragePlugin(Plugin):
@@ -210,11 +210,11 @@ class TestPluginViewCollectionOperations:
         db_plugin = DbPlugin()
         api_plugin = ApiPlugin()
 
-        await clean_core.register_plugin(storage_plugin)
-        await clean_core.register_plugin(db_plugin)
-        await clean_core.register_plugin(api_plugin)
+        await started_core.register_plugin(storage_plugin)
+        await started_core.register_plugin(db_plugin)
+        await started_core.register_plugin(api_plugin)
 
-        return clean_core, [storage_plugin, db_plugin, api_plugin]
+        return started_core, [storage_plugin, db_plugin, api_plugin]
 
     @pytest.mark.asyncio
     async def test_collection_filtering_with_view(self, core_with_plugins):
@@ -348,6 +348,7 @@ class TestPluginViewPropertyBased:
                 super().__init__(name="test", hooks_consumed=hc, events_published=ep)
 
         core = Core()
+        await core.start()
         plugin = TestPlugin(hooks_consumed, events_published)
         await core.register_plugin(plugin)
 
@@ -367,7 +368,7 @@ class TestPluginViewIntegration:
     """Integration tests for PluginView with real plugin scenarios."""
 
     @pytest.mark.asyncio
-    async def test_plugin_view_with_real_plugins(self, clean_core):
+    async def test_plugin_view_with_real_plugins(self, started_core):
         """PluginView works correctly with a multi-plugin dependency graph."""
 
         class StoragePlugin(Plugin):
@@ -382,7 +383,7 @@ class TestPluginViewIntegration:
             def __init__(self):
                 super().__init__(name="api", provides={"api"}, requires={"database"})
 
-        core = clean_core
+        core = started_core
 
         await core.register_plugin(StoragePlugin())
         await core.register_plugin(DbPlugin())
@@ -405,11 +406,11 @@ class TestPluginViewIntegration:
             assert obj.metadata.name == view.name
 
     @pytest.mark.asyncio
-    async def test_plugin_view_performance(self, clean_core):
+    async def test_plugin_view_performance(self, started_core):
         """Metadata access does not trigger lazy loading; lazy loading is fast thereafter."""
         import time
 
-        core = clean_core
+        core = started_core
 
         for i in range(10):
 
@@ -437,7 +438,7 @@ class TestPluginViewIntegration:
         assert metadata_time < lazy_load_time * 10
 
     @pytest.mark.asyncio
-    async def test_plugin_view_is_not_a_handle(self, clean_core):
+    async def test_plugin_view_is_not_a_handle(self, started_core):
         """The view is a description, not a handle: no __getattr__ delegation, and no
         invocation members to reach the live instance (RFC 0001 §3.2.2)."""
 
@@ -448,8 +449,8 @@ class TestPluginViewIntegration:
             def do_thing(self):
                 return "done"
 
-        await clean_core.register_plugin(WithMethod())
-        view = (await clean_core.list()).by_name("with_method")
+        await started_core.register_plugin(WithMethod())
+        view = (await started_core.list()).by_name("with_method")
 
         # A plugin method is not reachable as an attribute on the view...
         with pytest.raises(AttributeError):
@@ -678,8 +679,8 @@ class TestProxyHonesty:
     """The view never fabricates: every field reflects real state (decision #11)."""
 
     @pytest.mark.asyncio
-    async def test_status_reflects_real_lifecycle(self, clean_core):
-        core = clean_core
+    async def test_status_reflects_real_lifecycle(self, started_core):
+        core = started_core
 
         class LifecyclePlugin(Plugin):
             def __init__(self):
@@ -699,13 +700,13 @@ class TestProxyHonesty:
         assert _plugin_status_from_instance(unstarted) == "created"
 
     @pytest.mark.asyncio
-    async def test_size_field_is_gone(self, clean_core):
-        await clean_core.register_plugin(Plugin(name="anyone"))
-        view = (await clean_core.list()).by_name("anyone")
+    async def test_size_field_is_gone(self, started_core):
+        await started_core.register_plugin(Plugin(name="anyone"))
+        view = (await started_core.list()).by_name("anyone")
         assert not hasattr(view, "size")
 
     @pytest.mark.asyncio
-    async def test_no_getattr_delegation(self, clean_core):
+    async def test_no_getattr_delegation(self, started_core):
         """Unknown attributes fail at access time — no async wrapper magic, and the
         view exposes no invocation members (RFC 0001 §3.2.2)."""
 
@@ -716,8 +717,8 @@ class TestProxyHonesty:
             def do_thing(self):
                 return "done"
 
-        await clean_core.register_plugin(WithMethod())
-        view = (await clean_core.list()).by_name("with_method")
+        await started_core.register_plugin(WithMethod())
+        view = (await started_core.list()).by_name("with_method")
 
         with pytest.raises(AttributeError):
             _ = view.do_thing

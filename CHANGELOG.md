@@ -86,6 +86,7 @@ commit as its CHANGELOG entry.
   grant and points at `resolves`.
 
 ### Changed
+- **Breaking (pre-1.0):** the kernel no longer auto-starts on first plugin registration. `register_plugin`, `load_plugin`, and hot-reload now require the core to be `RUNNING` and raise `CoreError` otherwise. Call `core.start()` (or use `async with Core() as core:`) before registering plugins. The context-manager path and already-started cores are unaffected — hosts that already start explicitly see no behavioral change.
 - **Breaking (pre-1.0):** plugin construction is now coreless (RFC 0001 §3.2.3). The core
   is no longer a constructor argument; the kernel attaches it at register/reload time, so
   `self.core` is available from `on_start` onward, not inside `__init__`. Plugins change

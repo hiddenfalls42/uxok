@@ -348,10 +348,10 @@ class TestHandleErrorsM12:
         assert result == "fallback"
 
     @pytest.mark.asyncio
-    async def test_real_plugin_emits_core_plugin_error(self, clean_core):
+    async def test_real_plugin_emits_core_plugin_error(self, started_core):
         from uxok.protocols import Event
 
-        core = clean_core
+        core = started_core
 
         class Worker(Plugin):
             def __init__(self):

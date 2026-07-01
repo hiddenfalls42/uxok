@@ -2,6 +2,10 @@
 
 <!-- One line per note added, updated, or removed. Format: YYYY-MM-DD | action | path — description -->
 
+2026-06-30 | updated | docs/manifests/API.md — register_plugin/load_plugin raises: added CoreError if not RUNNING; added RUNNING-requirement note
+2026-06-30 | updated | docs/how-to/how-to-manage-core-lifecycle.md — removed the "Register a plugin before starting" section (auto-start removed); renumbered subsequent steps
+2026-06-30 | updated | docs/how-to/how-to-register-and-manage-plugins.md — removed auto-start claim; register example now calls core.start() before register_plugin
+
 2026-06-27 | updated | docs/index.md — fixed broken front-page quick-start: keyword-only coreless Plugin constructor (was the removed positional-core form, raised TypeError), and made it actually fire the handler by emitting greet.requested in on_start; verified runs
 2026-06-27 | added | docs/how-to/how-to-boot-a-plugin-graph-in-order.md — ordered registration (providers before consumers), build_host() factoring, and the wait_for_capability polling pattern for capabilities that arrive asynchronously; complete program verified
 2026-06-27 | added | docs/how-to/how-to-shut-down-gracefully.md — ShutdownHandler plugin trapping OS signals and the system.shutdown event, blocking main() until shutdown; assembled program verified

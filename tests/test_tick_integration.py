@@ -111,9 +111,9 @@ class TestCoreTickIntegration:
         assert received[0].tick > 0
 
     @pytest.mark.asyncio
-    async def test_hooks_receive_tick_context(self, clean_core: Core) -> None:
+    async def test_hooks_receive_tick_context(self, started_core: Core) -> None:
         """Hooks receive tick context via _tick_context keyword when clock is running."""
-        core = clean_core
+        core = started_core
         received_ticks: list[int] = []
 
         plugin = StubPlugin()

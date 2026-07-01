@@ -231,6 +231,7 @@ class Core(CoreProtocol):
             True if registered successfully
 
         Raises:
+            CoreError: If the core is not in RUNNING state.
             PluginError: If registration fails
             MissingCapabilityError: If required capabilities are not available
         """
@@ -308,6 +309,9 @@ class Core(CoreProtocol):
 
     async def _register_plugin_now(self, plugin: PluginProtocol) -> bool:
         """Actual registration logic, runs within a tick boundary."""
+        if self.state is not CoreState.RUNNING:
+            raise CoreError("Core must be started before registering plugins")
+
         plugin_id = plugin.metadata.id
 
         # At-commit admission (RFC 0003 v2 / spec 0005 §A.3): the same check
@@ -344,7 +348,6 @@ class Core(CoreProtocol):
             await self._hook_system.execute("plugin.registered", plugin)
 
             self._collection_service.invalidate()
-            await self._maybe_autostart_after_first_registration()
 
             logger.info(
                 "Plugin registered",
@@ -389,29 +392,6 @@ class Core(CoreProtocol):
         finally:
             await self._active_operations.remove(plugin_id)
 
-    async def _maybe_autostart_after_first_registration(self) -> None:
-        """Auto-start core on the first successful plugin registration.
-
-        Concurrent registrations may race here; StateManager's atomic
-        transition lets exactly one win. Losing the race is success, not
-        failure — the core is running either way, so the loser's (healthy)
-        registration must not be rolled back.
-        """
-        if self.state != CoreState.INITIALIZED:
-            return
-
-        try:
-            await self.start()
-        except CoreError:
-            if self.state == CoreState.RUNNING:
-                return  # lost the auto-start race; another registration won
-            raise
-
-        logger.info(
-            "Core auto-started on first plugin registration",
-            extra={"core_id": str(self._id)},
-        )
-
     async def load_plugin(self, code: str, origin: str | None = None) -> bool:
         """Load or reload a plugin from a code string.
 
@@ -452,8 +432,12 @@ class Core(CoreProtocol):
             True if the plugin was successfully loaded or reloaded.
 
         Raises:
+            CoreError: If the core is not in RUNNING state.
             PluginError: If no Plugin subclass is found, or loading fails.
         """
+        if self.state is not CoreState.RUNNING:
+            raise CoreError("Core must be started before loading plugins")
+
         import sys
         import types
         from pathlib import Path
@@ -682,6 +666,9 @@ class Core(CoreProtocol):
         must be serialized through the lifecycle lock and protected by the same
         per-plugin operation guard as registration/unregistration.
         """
+        if self.state is not CoreState.RUNNING:
+            raise CoreError("Core must be started before reloading plugins")
+
         plugin_id = old_plugin.metadata.id
 
         if not await self._active_operations.add(plugin_id):

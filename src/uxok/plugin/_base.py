@@ -50,10 +50,7 @@ class Plugin(PluginProtocol):
                 )
 
             async def on_start(self):
-                # Get storage capability provider using rich filtering
-                plugins = await self.core.list()
-                storage_providers = plugins.capability.provides("storage")
-                storage = await storage_providers.first()
+                storage = await self.get_capability("storage")
                 await storage.initialize()
 
             @hook("process.data", priority=10)
@@ -622,5 +619,3 @@ class Plugin(PluginProtocol):
             )
         except Exception:
             logger.debug("Failed to publish core.plugin_error", exc_info=True)
-
-    # ========= Internal Helpers ==========

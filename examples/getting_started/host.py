@@ -26,8 +26,8 @@ from .model import Model
 async def build_host(core: Core, done: asyncio.Event) -> None:
     """Register the two-plugin graph on ``core`` in dependency order.
 
-    The provider (``Model``, which provides ``llm``) comes up before the
-    ``Agent`` that requires it — registration order matters, providers first.
+    Whatever provides a capability must be registered before whatever requires
+    it, so ``Model`` (provides ``llm``) comes up before ``Agent`` (requires it).
     """
     await core.register_plugin(Model())  # provides "llm"
     await core.register_plugin(Agent(done))  # requires "llm"

@@ -1,6 +1,6 @@
-"""Agent — the conversational consumer of the ``llm`` capability.
+"""Agent — a plugin that requires the ``llm`` capability and drives the conversation.
 
-Declares ``requires={"llm"}`` and resolves that provider by name in
+Declares ``requires={"llm"}`` and resolves that capability by name in
 ``on_start`` — it never imports the sibling ``model`` module. It drives a short,
 self-sustaining conversation over the event bus: each ``turn``
 speaks one queued line, then re-emits ``turn`` for the next. When the queue is

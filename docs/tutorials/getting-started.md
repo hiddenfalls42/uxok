@@ -1,9 +1,14 @@
 # Getting started
 
-Build your first uxok program — structured the way a real one is. Each plugin
-lives in its own module, and a small *host* module composes them into a running
-conversation and shuts it down cleanly. By the end you will have a package you can
-run and verify.
+Build your first uxok program — structured the way a real one is. You will write
+two plugins, each in its own module, and a small *host* module that composes them
+on a `Core` and runs them. By the end you will have a package you can run and
+verify.
+
+The program these plugins make — a two-line toy conversation — is beside the
+point. The point is the **shape**: how you define a plugin, how plugins declare
+their relationships and talk to each other, and how a host wires them together.
+Learn that shape here and it carries over to whatever you actually build.
 
 The [README](https://github.com/hiddenfalls42/uxok#quick-start) shows the same
 program crammed into a single script — handy for a quick look. This tutorial
@@ -14,16 +19,23 @@ import each other, wired together only through the kernel.
 
 A package called `chat/` with three modules:
 
-- `model.py` — a `Model` plugin that provides the `"llm"` capability and
-  contributes a `"persona"` hook
-- `agent.py` — an `Agent` plugin that declares `requires={"llm"}`, fetches the
-  model on start, and drives a short turn-by-turn conversation over the event bus
-- `host.py` — composes the two plugins on a `Core` and runs the conversation to
+- `model.py` — a plugin that *provides* an `"llm"` capability and contributes a
+  `"persona"` hook
+- `agent.py` — a plugin that *requires* `"llm"`, resolves it on start, and drives
+  a short turn-by-turn conversation over the event bus
+- `host.py` — creates a `Core`, registers the two plugins, and runs them to
   completion
 
 Running it prints four lines — a user line and an agent line for each of two
 turns. That is the test: if you see those lines, the capability system, the hook
 system, and the event bus all worked.
+
+**These are just plugins.** "Provider" and "consumer" name a *relationship*
+around one capability, not two kinds of thing. `provides` and `requires` are
+per-capability declarations: a single plugin can provide some capabilities and
+require others at the same time. Here one plugin happens to provide `"llm"` and
+the other happens to require it — which is which does not matter. Watch how they
+are defined and wired, not what they compute.
 
 ## Prerequisites
 
@@ -53,14 +65,14 @@ A ready-to-run copy of this package lives in the repository at
 and is covered by `tests/test_getting_started.py` so it never drifts from what you
 see here.
 
-## `model.py` — the provider
+## The first plugin: `model.py`
 
-A plugin subclasses `Plugin`. All constructor arguments — `name`, `provides`,
-`requires`, and the rest — are keyword-only, and there is no `core` parameter; the
-kernel attaches the core at registration time.
+A plugin is a class that subclasses `Plugin`. All constructor arguments — `name`,
+`provides`, `requires`, and the rest — are keyword-only, and there is no `core`
+parameter; the kernel attaches the core at registration time.
 
 ```python
-"""Model — provider of the ``llm`` capability and the ``persona`` hook.
+"""Model — a plugin that provides the ``llm`` capability and the ``persona`` hook.
 
 Stands in for an inference backend. It *provides* the ``llm`` capability; any
 plugin that declares ``requires={"llm"}`` calls :meth:`reply` through the
@@ -87,21 +99,22 @@ class Model(Plugin):
         return "Cheerfully:"
 ```
 
-`provides={"llm"}` declares this plugin as a provider of the `"llm"` capability.
-Any plugin that declares `requires={"llm"}` can then fetch this instance and call
-`reply()` on it — without importing `Model`.
+`provides={"llm"}` declares that this plugin provides the `"llm"` capability. Any
+plugin that declares `requires={"llm"}` can then fetch this instance and call
+`reply()` on it — without importing `Model`. The name `"llm"` is an arbitrary tag;
+the two sides just have to agree on it.
 
 `@hook("persona")` contributes to a named extension point. A hook is a question
 any plugin can ask ("what voice should replies use?") and any plugin can answer;
 `Model` answers with `"Cheerfully:"`. `reply` is written `async` so callers can
 `await` it — a convention here, not a kernel rule.
 
-## `agent.py` — the consumer
+## The second plugin: `agent.py`
 
 ```python
-"""Agent — the conversational consumer of the ``llm`` capability.
+"""Agent — a plugin that requires the ``llm`` capability and drives the conversation.
 
-Declares ``requires={"llm"}`` and resolves that provider by name in
+Declares ``requires={"llm"}`` and resolves that capability by name in
 ``on_start`` — it never imports the sibling ``model`` module. It drives a short,
 self-sustaining conversation over the event bus: each ``turn``
 speaks one queued line, then re-emits ``turn`` for the next. When the queue is
@@ -149,12 +162,13 @@ class Agent(Plugin):
 
 Three primitives appear here.
 
-**Capabilities.** `on_start()` runs once when the plugin starts. It resolves the
-provider with `self.get_capability("llm")`, which returns the `Model` instance, so
-`self.llm.reply(...)` calls it directly. This is the canonical way a plugin reaches
-a dependency — the sibling of `self.emit` and `self.hook`. (`self.core` also
-exposes `get_capability`, but the plugin method is the one to reach for.) The
-plugin resolves the model *by name*; it never imports the `model` module.
+**Capabilities.** `on_start()` runs once when the plugin starts. It calls
+`self.get_capability("llm")`, which returns whatever plugin provides `"llm"` —
+here the `Model` instance — so `self.llm.reply(...)` calls it directly. This is
+the canonical way a plugin reaches a dependency, the sibling of `self.emit` and
+`self.hook`. (`self.core` also exposes `get_capability`, but the plugin method is
+the one to reach for.) Resolution is *by name*; the plugin never imports the
+`model` module and does not care which plugin answers.
 
 **Events.** `self.emit("turn")` publishes an event; `@event("turn")` subscribes a
 method to it. The agent drives itself: `on_start` emits the first `"turn"`, and
@@ -167,7 +181,7 @@ patterns, so `@event("turn.*")` would also match `turn.user.done`.
 takes the first answer. Drop `firstresult` and you get the full list of every
 handler's result in priority order — a pipeline rather than a single answer.
 
-## `host.py` — the composition
+## The host: `host.py`
 
 ```python
 """host.py — composes the getting-started conversation into a runnable program.
@@ -198,8 +212,8 @@ from .model import Model
 async def build_host(core: Core, done: asyncio.Event) -> None:
     """Register the two-plugin graph on ``core`` in dependency order.
 
-    The provider (``Model``, which provides ``llm``) comes up before the
-    ``Agent`` that requires it — registration order matters, providers first.
+    Whatever provides a capability must be registered before whatever requires
+    it, so ``Model`` (provides ``llm``) comes up before ``Agent`` (requires it).
     """
     await core.register_plugin(Model())  # provides "llm"
     await core.register_plugin(Agent(done))  # requires "llm"
@@ -225,8 +239,10 @@ by hand when you need finer control — see
 
 **Registration order matters.** The kernel checks `requires` when
 `register_plugin` is called and raises `MissingCapabilityError` immediately if no
-registered plugin provides the capability. Register providers before consumers —
-which is why `build_host` adds `Model` before `Agent`.
+registered plugin provides the capability. Register whatever provides a capability
+before whatever requires it — which is why `build_host` adds `Model` before
+`Agent`. That is the *only* ordering constraint; it follows from the `requires`
+edges, not from any fixed idea of which plugin comes first.
 
 The `asyncio.Event` is how `main()` knows when to stop. Registration returns
 immediately, so without `await done.wait()` the block would exit before the
@@ -256,14 +272,18 @@ agent: Cheerfully: you said 'what's the weather like?'.
 
 ## The key idea
 
-Open `model.py` and `agent.py` side by side: they share no import. `Agent` never
-mentions `Model`; it asks for the `"llm"` capability by name and the kernel hands
-back whoever provides it. The host is the only place the two meet, and it wires
-them by capability, not by import.
+Open `model.py` and `agent.py` side by side: they share no import. Neither plugin
+names the other; one asks for the `"llm"` capability by name and the kernel hands
+back whatever plugin provides it. The host is the only place the two meet, and it
+wires them by capability, not by import.
 
-That decoupling is the whole point of the structure. Swap in a different `"llm"`
-provider, or hot-reload one at runtime, and the agent that consumes it never
-changes.
+That decoupling is the whole point of the structure, and it is what makes the
+roles arbitrary. Swap in a different plugin that provides `"llm"`, or hot-reload
+one at runtime, and the plugin that requires it never changes. Add a third plugin
+that both requires `"llm"` and provides something new, and nothing already written
+has to know. You are not building a fixed provider-and-consumer pair — you are
+building plugins that declare what they need and offer, and letting the kernel
+connect them.
 
 ## Next steps
 

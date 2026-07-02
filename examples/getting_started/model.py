@@ -1,4 +1,4 @@
-"""Model — provider of the ``llm`` capability and the ``persona`` hook.
+"""Model — a plugin that provides the ``llm`` capability and the ``persona`` hook.
 
 Stands in for an inference backend. It *provides* the ``llm`` capability; any
 plugin that declares ``requires={"llm"}`` calls :meth:`reply` through the

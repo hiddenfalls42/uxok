@@ -21,10 +21,11 @@ A package called `chat/` with three modules:
 
 - `model.py` — a plugin that *provides* an `"llm"` capability and contributes a
   `"persona"` hook
-- `agent.py` — a plugin that *requires* `"llm"`, resolves it on start, and drives
-  a short turn-by-turn conversation over the event bus
-- `host.py` — creates a `Core`, registers the two plugins, and runs them to
-  completion
+- `agent.py` — a plugin that *requires* `"llm"`, resolves it on start, drives a
+  short turn-by-turn conversation over the event bus, and emits a done event when
+  finished
+- `host.py` — a tiny hot-loader: it reads the two plugins from *source* and loads
+  them onto a `Core`, then runs them to completion
 
 Running it prints four lines — a user line and an agent line for each of two
 turns. That is the test: if you see those lines, the capability system, the hook
@@ -116,9 +117,10 @@ any plugin can ask ("what voice should replies use?") and any plugin can answer;
 
 Declares ``requires={"llm"}`` and resolves that capability by name in
 ``on_start`` — it never imports the sibling ``model`` module. It drives a short,
-self-sustaining conversation over the event bus: each ``turn``
-speaks one queued line, then re-emits ``turn`` for the next. When the queue is
-empty it sets the ``done`` event, which lets the host shut down.
+self-sustaining conversation over the event bus: each ``turn`` speaks one queued
+line, then re-emits ``turn`` for the next. When the queue empties it emits
+``conversation.over``, which the host listens for so it can shut down. It takes no
+constructor arguments, so a host can hot-load it from source.
 """
 
 from __future__ import annotations
@@ -128,18 +130,15 @@ from typing import TYPE_CHECKING
 from uxok import Plugin, event
 
 if TYPE_CHECKING:
-    import asyncio
-
     from uxok.protocols import Event
 
 
 class Agent(Plugin):
-    """Requires ``llm``; speaks each queued line, then signals the host it is done."""
+    """Requires ``llm``; speaks each queued line, then announces it is done."""
 
-    def __init__(self, done: asyncio.Event) -> None:
+    def __init__(self) -> None:
         super().__init__(name="agent", requires={"llm"})
         self.lines = ["hello there", "what's the weather like?"]
-        self.done = done
 
     async def on_start(self) -> None:
         # Resolved once by name; the capability surface hands back the live provider.
@@ -149,7 +148,7 @@ class Agent(Plugin):
     @event("turn")
     async def speak(self, _ev: Event) -> None:
         if not self.lines:
-            self.done.set()  # conversation over — release the host
+            await self.emit("conversation.over")  # let the host shut down
             return
         line = self.lines.pop(0)
         # The persona is resolved per reply through the hook, so a different
@@ -173,9 +172,12 @@ the one to reach for.) Resolution is *by name*; the plugin never imports the
 **Events.** `self.emit("turn")` publishes an event; `@event("turn")` subscribes a
 method to it. The agent drives itself: `on_start` emits the first `"turn"`, and
 each `speak` emits the next after printing, until `self.lines` is empty — then it
-sets the `done` event so the host can stop. The handler receives the `Event`, but
-this one has no use for it, so it is named `_ev`. Event names are matched as glob
-patterns, so `@event("turn.*")` would also match `turn.user.done`.
+emits `"conversation.over"` instead, an event the host is subscribed to so it
+knows the run is finished. Note there is no shared `done` object between agent and
+host: they coordinate purely through a named event, which is what lets the host
+load the agent as opaque source. The handler receives the `Event`, but this one
+has no use for it, so it is named `_ev`. Event names are matched as glob patterns,
+so `@event("turn.*")` would also match `turn.user.done`.
 
 **Hooks.** `self.hook("persona", firstresult=True)` runs the `"persona"` hook and
 takes the first answer. Drop `firstresult` and you get the full list of every
@@ -184,12 +186,14 @@ handler's result in priority order — a pipeline rather than a single answer.
 ## The host: `host.py`
 
 ```python
-"""host.py — composes the getting-started conversation into a runnable program.
+"""host.py — a tiny hot-loader that composes the conversation and runs it.
 
-A *host* boots a :class:`~uxok.Core`, registers a graph of plugins on it in
-dependency order, and keeps it alive until the work is done. This is the minimal,
-modular sibling of the README quick-start: the same Model / Agent / persona-hook
-conversation, but each plugin lives in its own module.
+A *host* boots a :class:`~uxok.Core` and brings plugins up on it. Rather than
+importing the plugin classes, this host reads each plugin's *source* and hands it
+to :meth:`~uxok.Core.load_plugin`; the kernel compiles, registers, and starts it.
+That is uxok's "downloaded policy" — the kernel runs plugin code it never compiled
+against, so the host binds to nothing but file paths and a load order, not to the
+plugin classes themselves.
 
 ``build_host`` is shared by ``main`` and the test suite, so the running program
 and the tested program never drift.
@@ -202,28 +206,38 @@ Run it:
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
+from typing import TYPE_CHECKING
 
 from uxok import Core
 
-from .agent import Agent
-from .model import Model
+if TYPE_CHECKING:
+    from uxok.protocols import Event
+
+_HERE = Path(__file__).resolve().parent
 
 
-async def build_host(core: Core, done: asyncio.Event) -> None:
-    """Register the two-plugin graph on ``core`` in dependency order.
+async def build_host(core: Core) -> None:
+    """Load the plugins from source, provider before requirer.
 
-    Whatever provides a capability must be registered before whatever requires
-    it, so ``Model`` (provides ``llm``) comes up before ``Agent`` (requires it).
+    ``model`` (provides ``llm``) must come up before ``agent`` (requires it) — the
+    kernel checks ``requires`` at load time and would reject the agent otherwise.
     """
-    await core.register_plugin(Model())  # provides "llm"
-    await core.register_plugin(Agent(done))  # requires "llm"
+    for name in ("model", "agent"):
+        path = _HERE / f"{name}.py"
+        await core.load_plugin(path.read_text(), origin=str(path))
 
 
 async def main() -> None:
     done = asyncio.Event()
     async with Core() as core:  # context manager starts/stops the kernel
-        await build_host(core, done)
-        await done.wait()  # stay alive until the agent finishes the conversation
+
+        async def _stop(_ev: Event) -> None:
+            done.set()
+
+        await core.events.subscribe("conversation.over", _stop)
+        await build_host(core)
+        await done.wait()  # stay alive until the agent announces it is done
 
 
 if __name__ == "__main__":
@@ -237,17 +251,28 @@ starts the kernel on entry and tears it down on exit — no explicit
 by hand when you need finer control — see
 [Manage core lifecycle](../how-to/how-to-manage-core-lifecycle.md).)
 
-**Registration order matters.** The kernel checks `requires` when
-`register_plugin` is called and raises `MissingCapabilityError` immediately if no
-registered plugin provides the capability. Register whatever provides a capability
-before whatever requires it — which is why `build_host` adds `Model` before
-`Agent`. That is the *only* ordering constraint; it follows from the `requires`
-edges, not from any fixed idea of which plugin comes first.
+**Loading from source, not importing.** This is the heart of it. `build_host`
+never mentions the `Model` or `Agent` classes; it reads their `.py` files and
+passes the text to `core.load_plugin(...)`. The kernel executes that source in an
+isolated module, finds the `Plugin` subclass, and registers and starts it — code
+it never compiled against. `origin=` tells it where the source came from (so a
+plugin can import sibling helper modules relatively). Because the kernel builds
+the instance itself, hot-loaded plugins take **no constructor arguments** — which
+is exactly why the agent carries its own line queue and signals completion by
+event rather than through a `done` object the host would have to hand it.
 
-The `asyncio.Event` is how `main()` knows when to stop. Registration returns
-immediately, so without `await done.wait()` the block would exit before the
-conversation ran. The agent calls `done.set()` when it runs out of lines, which
-releases `wait()` and lets the context manager shut everything down.
+**Load order matters.** The kernel checks `requires` when a plugin is loaded and
+raises `MissingCapabilityError` immediately if no loaded plugin provides the
+capability. Load whatever provides a capability before whatever requires it — which
+is why `build_host` loads `model` before `agent`. That is the *only* ordering
+constraint; it follows from the `requires` edges, not from any fixed idea of which
+plugin comes first.
+
+`main()` stops when the agent says so. It subscribes `_stop` to
+`"conversation.over"` *before* loading the plugins (loading the agent starts it,
+and the conversation begins at once), then waits on an `asyncio.Event` the handler
+sets. Registration returns immediately, so without `await done.wait()` the block
+would exit before the conversation ran.
 
 Keeping `build_host` separate from `main` is a small but useful habit: the test
 suite calls the same `build_host`, so the program you run and the program you test
@@ -272,18 +297,19 @@ agent: Cheerfully: you said 'what's the weather like?'.
 
 ## The key idea
 
-Open `model.py` and `agent.py` side by side: they share no import. Neither plugin
-names the other; one asks for the `"llm"` capability by name and the kernel hands
-back whatever plugin provides it. The host is the only place the two meet, and it
-wires them by capability, not by import.
+Look at what nothing imports what. `model.py` and `agent.py` share no import —
+one asks for `"llm"` by name and the kernel hands back whatever provides it. And
+`host.py` imports *neither* plugin class: it loads them as source and coordinates
+with them through one named event. The only things that cross module boundaries
+are strings — a capability name, an event name — never a class.
 
-That decoupling is the whole point of the structure, and it is what makes the
-roles arbitrary. Swap in a different plugin that provides `"llm"`, or hot-reload
-one at runtime, and the plugin that requires it never changes. Add a third plugin
-that both requires `"llm"` and provides something new, and nothing already written
-has to know. You are not building a fixed provider-and-consumer pair — you are
-building plugins that declare what they need and offer, and letting the kernel
-connect them.
+That is the whole point of the structure, and it is what makes the roles
+arbitrary. Swap in a different plugin that provides `"llm"`, or hot-reload one at
+runtime, and the plugin that requires it never changes. Add a third plugin that
+both requires `"llm"` and provides something new, and nothing already written has
+to know. You are not building a fixed provider-and-consumer pair wired together at
+import time — you are handing the kernel plugins that declare what they need and
+offer, and letting it connect them at runtime.
 
 ## Next steps
 

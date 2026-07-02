@@ -2,8 +2,9 @@
 
 The same two-plugin conversation as the README, but each plugin lives in its own
 module and a ``host`` module composes them — the structure a real uxok project
-uses. The plugins import only the kernel, never each other; the host wires them
-in dependency order and runs the conversation to completion.
+uses. The plugins import only the kernel, never each other; the host imports
+neither plugin class — it hot-loads both from source with ``core.load_plugin`` and
+lets them coordinate by capability and event, then runs to completion.
 
 This is the minimal counterpart to ``example_host/``: two plugins, a persona hook
 carried on the model, and a clean self-terminating run. Run it with

@@ -11,11 +11,12 @@ is its acceptance suite and runs the whole graph under both `capability_access`
 modes.
 
 `getting_started/` is the minimal counterpart — the same Model / Agent / persona-hook
-conversation, two plugins and a host, that self-terminates with checkable output.
-It is the package the [Getting started](../docs/tutorials/getting-started.md)
-tutorial walks through, run with `python -m examples.getting_started.host` and
-covered by `tests/test_getting_started.py`. Start there; reach for `example_host/`
-when you want hot reload and graceful shutdown.
+conversation, two plugins and a host that **hot-loads both from source** (importing
+neither plugin class) and self-terminates on a completion event. It is the package
+the [Getting started](../docs/tutorials/getting-started.md) tutorial walks through,
+run with `python -m examples.getting_started.host` and covered by
+`tests/test_getting_started.py`. Start there; reach for `example_host/` when you
+want live hot-*reload* (swapping a running plugin) and graceful signal shutdown.
 
 More examples are planned as time allows — otherwise the docs cover each primitive
 in depth.

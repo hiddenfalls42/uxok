@@ -39,7 +39,12 @@ async def core(request):
 @pytest.mark.asyncio
 async def test_conversation_prints_two_turns(core, capsys):
     done = asyncio.Event()
-    await build_host(core, done)
+
+    async def _stop(_ev):
+        done.set()
+
+    await core.events.subscribe("conversation.over", _stop)
+    await build_host(core)  # hot-loads model then agent from source
     await asyncio.wait_for(done.wait(), timeout=2.0)
 
     printed = capsys.readouterr().out.splitlines()

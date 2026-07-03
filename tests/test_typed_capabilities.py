@@ -534,46 +534,49 @@ class TestTypedCapabilityResolution:
 
 
 class TestTypedCapabilityInfo:
-    """Tests for get_capability_info with typed capabilities."""
+    """Tests for capability info introspection via snapshot_capability_info."""
 
     @pytest.mark.asyncio
     async def test_info_includes_typed_flag(self, started_core: Core):
         """Capability info should indicate when a protocol is associated."""
         await started_core.register_plugin(GreetingsPlugin())
 
-        info = await started_core._capability_system.get_capability_info("greeting")
-        assert info is not None
-        assert info["typed"] is True
+        snapshot = started_core._capability_system.snapshot_capability_info()
+        assert "greeting" in snapshot
+        assert snapshot["greeting"].typed is True
 
     @pytest.mark.asyncio
     async def test_info_untyped_flag_for_string_only(self, started_core: Core):
         """String-only capability should have typed=False."""
         await started_core.register_plugin(MathPlugin())
 
-        info = await started_core._capability_system.get_capability_info("math")
-        assert info is not None
-        assert info["typed"] is False
+        snapshot = started_core._capability_system.snapshot_capability_info()
+        assert "math" in snapshot
+        assert snapshot["math"].typed is False
 
     @pytest.mark.asyncio
     async def test_info_includes_protocol_methods(self, started_core: Core):
         """Capability info should include protocol method signatures."""
         await started_core.register_plugin(GreetingsPlugin())
 
-        info = await started_core._capability_system.get_capability_info("greeting")
-        assert "protocol" in info
-        assert info["protocol"]["name"] == "Greeting"
-
-        method_names = [m["name"] for m in info["protocol"]["methods"]]
+        snapshot = started_core._capability_system.snapshot_capability_info()
+        info = snapshot["greeting"]
+        assert info.typed is True
+        assert info.protocol_name == "Greeting"
+        method_names = [m["name"] for m in info.protocol_methods]
         assert "hello" in method_names
         assert "goodbye" in method_names
 
     @pytest.mark.asyncio
     async def test_info_no_protocol_for_string_only(self, started_core: Core):
-        """String-only capability should not have a protocol section."""
+        """String-only capability should have empty protocol fields."""
         await started_core.register_plugin(MathPlugin())
 
-        info = await started_core._capability_system.get_capability_info("math")
-        assert "protocol" not in info
+        snapshot = started_core._capability_system.snapshot_capability_info()
+        info = snapshot["math"]
+        assert info.typed is False
+        assert info.protocol_name == ""
+        assert info.protocol_methods == []
 
 
 # ========== Collision Policy Tests with Typed Capabilities ==========
@@ -643,8 +646,8 @@ class TestTypedCapabilityCleanup:
         provider = GreetingsPlugin()
         await started_core.register_plugin(provider)
 
-        info = await started_core._capability_system.get_capability_info("greeting")
-        assert info["typed"] is True
+        snapshot = started_core._capability_system.snapshot_capability_info()
+        assert snapshot["greeting"].typed is True
 
         await started_core.unregister_plugin(provider.metadata.id)
 

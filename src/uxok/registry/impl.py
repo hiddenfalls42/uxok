@@ -5,10 +5,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from uxok.core._shared_utils import (
-    format_plugin_error,
-    log_op,
-)
+from uxok.utils import format_plugin_error, log_op
 
 if TYPE_CHECKING:
     from collections.abc import Set

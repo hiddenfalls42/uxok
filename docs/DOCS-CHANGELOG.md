@@ -9,6 +9,11 @@
 2026-07-02 | updated | docs/explanation/plugin-architecture.md — five→six primitives in opening sentence
 2026-07-02 | added | docs/manifests/FRAMEWORK_PHILOSOPHY.md — tombstone stub redirecting to docs/explanation/framework-philosophy.md
 2026-07-02 | added | docs/manifests/KERNEL_ARCHITECTURE.md — tombstone stub redirecting to docs/explanation/architecture-overview.md
+2026-07-02 | updated | docs/how-to/how-to-use-plugin-configuration.md — removed §4 CoreConfig fallback section; updated lookup table to three sources
+2026-07-02 | updated | docs/manifests/API.md — config() three-source note + §15 Removed row for CoreConfig fallthrough removal
+2026-07-02 | removed | docs/how-to/how-to-use-error-handler-decorator.md — deleted; handle_errors decorator removed from the kernel
+2026-07-02 | updated | docs/how-to/index.md — removed Error handling section and its single bullet
+2026-07-02 | updated | docs/manifests/API.md — removed §4.3 handle_errors, plugin.error legacy section, and related references; added §15 Removed row
 
 2026-06-30 | updated | docs/manifests/API.md — register_plugin/load_plugin raises: added CoreError if not RUNNING; added RUNNING-requirement note
 2026-06-30 | updated | docs/how-to/how-to-manage-core-lifecycle.md — removed the "Register a plugin before starting" section (auto-start removed); renumbered subsequent steps

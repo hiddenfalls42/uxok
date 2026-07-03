@@ -64,23 +64,23 @@ class TestCapabilitySystem:
 
     @pytest.mark.asyncio
     async def test_get_capability_info(self, started_core: Core):
-        """Test getting capability information."""
+        """Test getting capability information via snapshot_capability_info."""
         # Register provider
         provider = MockCapabilityPlugin(name="provider", provides={"test_cap"})
         await started_core.register_plugin(provider)
 
-        info = await started_core._capability_system.get_capability_info("test_cap")
-        assert info is not None
-        assert info["name"] == "test_cap"
-        assert info["selected_provider"] == "provider"
-        assert info["selected_provider_id"] == str(provider.metadata.id)
-        assert info["selected_version"] == "1.0.0"
-        assert info["provider_count"] == 1
-        assert len(info["all_providers"]) == 1
+        snapshot = started_core._capability_system.snapshot_capability_info()
+        assert "test_cap" in snapshot
+        info = snapshot["test_cap"]
+        assert info.name == "test_cap"
+        assert info.selected_provider == "provider"
+        assert info.provider_count == 1
+        assert len(info.providers) == 1
+        assert info.providers[0]["id"] == str(provider.metadata.id)
+        assert info.providers[0]["version"] == "1.0.0"
 
-        # Missing capability
-        info = await started_core._capability_system.get_capability_info("missing")
-        assert info is None
+        # Missing capability not in snapshot
+        assert "missing" not in snapshot
 
 
 class TestCapabilityCollisionPolicies:

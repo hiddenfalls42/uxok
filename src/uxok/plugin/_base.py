@@ -14,7 +14,7 @@ from uxok.plugin._naming import detect_plugin_name, validate_plugin_name
 from uxok.plugin.config_field import REQUIRED
 from uxok.protocols import Core, Event, PluginMetadata, PluginProtocol
 from uxok.protocols._types import PluginId
-from uxok.utils import AsyncTaskManager, normalize_capability_set
+from uxok.utils import AsyncTaskManager, build_plugin_error_event, normalize_capability_set
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Coroutine
@@ -50,10 +50,7 @@ class Plugin(PluginProtocol):
                 )
 
             async def on_start(self):
-                # Get storage capability provider using rich filtering
-                plugins = await self.core.list()
-                storage_providers = plugins.capability.provides("storage")
-                storage = await storage_providers.first()
+                storage = await self.get_capability("storage")
                 await storage.initialize()
 
             @hook("process.data", priority=10)
@@ -179,59 +176,6 @@ class Plugin(PluginProtocol):
         hooks, event_handlers = discover_decorated_methods(self)
         self._hooks.update(hooks)
         self._event_handlers.update(event_handlers)
-
-        # Create direct hook method (delegates to hook system)
-        def hook_method(
-            name: str,
-            *args: Any,
-            at_tick: int | None = None,
-            firstresult: bool = False,
-            **kwargs: Any,
-        ) -> Any:
-            """Execute hooks by name.
-
-            Args:
-                name: Hook name
-                *args: Positional arguments passed to hooks
-                at_tick: If provided, defer execution until this tick number.
-                         Must be > core.tick at call time. Raises ValueError if
-                         in the past. Returns None (fire-and-forget).
-                firstresult: If True, return first non-None result immediately.
-                **kwargs: Keyword arguments passed to hooks
-
-            Returns:
-                Hook results (list, or first non-None when firstresult=True),
-                or None when at_tick is set (deferred; result unavailable).
-            """
-            if at_tick is not None:
-                current_tick = self.__core_real.tick
-                if at_tick <= current_tick:
-                    raise ValueError(
-                        f"at_tick={at_tick} is in the past (current tick={current_tick}). "
-                        "Use core.tick + N for future scheduling."
-                    )
-                self.__core_real._tick_scheduler.schedule_at(  # type: ignore[attr-defined]
-                    at_tick,
-                    current_tick,
-                    factory=lambda: self.__core_real.hooks.execute(
-                        name,
-                        *args,
-                        firstresult=firstresult,
-                        plugin_id=str(self._metadata.id),
-                        **kwargs,
-                    ),
-                    owner=self,
-                )
-                return None
-            return self.__core_real.hooks.execute(
-                name,
-                *args,
-                firstresult=firstresult,
-                plugin_id=str(self._metadata.id),
-                **kwargs,
-            )
-
-        self.hook = hook_method
 
     # ========== Essential Properties ==========
 
@@ -433,6 +377,30 @@ class Plugin(PluginProtocol):
 
     # ========== Convenience Methods ==========
 
+    def _defer(self, at_tick: int, factory: Callable[[], Any]) -> None:
+        """Schedule *factory* for execution at *at_tick*.
+
+        Shared by :meth:`emit` and :meth:`hook`. Validates the tick is in the
+        future and delegates to the TickScheduler. ``owner=self`` binds the
+        scheduled entry to this plugin instance so hot-reload drains the old
+        instance's deferred work without touching the new one's.
+
+        Raises:
+            ValueError: If ``at_tick <= core.tick`` (tick is in the past).
+        """
+        current_tick = self.__core_real.tick
+        if at_tick <= current_tick:
+            raise ValueError(
+                f"at_tick={at_tick} is in the past (current tick={current_tick}). "
+                "Use core.tick + N for future scheduling."
+            )
+        self.__core_real._tick_scheduler.schedule_at(  # type: ignore[attr-defined]
+            at_tick,
+            current_tick,
+            factory=factory,
+            owner=self,
+        )
+
     async def emit(self, event_name: str, data: Any = None, *, at_tick: int | None = None) -> None:
         """Convenience: Publish an event.
 
@@ -451,24 +419,57 @@ class Plugin(PluginProtocol):
         """
         if at_tick is not None:
             event = Event(event_name, data, source=self._metadata.name)
-            current_tick = self.__core_real.tick
-            # Validate immediately — fail fast
-            if at_tick <= current_tick:
-                raise ValueError(
-                    f"at_tick={at_tick} is in the past (current tick={current_tick}). "
-                    "Use core.tick + N for future scheduling."
-                )
-            # Schedule via TickScheduler
-            self.__core_real._tick_scheduler.schedule_at(  # type: ignore[attr-defined]
-                at_tick,
-                current_tick,
-                factory=lambda: self.__core_real.events.publish(event),
-                owner=self,
-            )
+            self._defer(at_tick, factory=lambda: self.__core_real.events.publish(event))
             return
         if not self.__core_real.events.has_subscribers(event_name):
             return
         await self.__core_real.events.publish(Event(event_name, data, source=self._metadata.name))
+
+    def hook(
+        self,
+        name: str,
+        *args: Any,
+        at_tick: int | None = None,
+        firstresult: bool = False,
+        **kwargs: Any,
+    ) -> Any:
+        """Execute hooks by name.
+
+        Args:
+            name: Hook name.
+            *args: Positional arguments passed to hook implementations.
+            at_tick: If provided, defer execution until this tick number.
+                     Must be > core.tick at call time. Raises ValueError if
+                     in the past. Returns None (fire-and-forget).
+            firstresult: If True, return the first non-None result immediately.
+            **kwargs: Keyword arguments passed to hook implementations.
+
+        Returns:
+            Hook results (list, or first non-None when ``firstresult=True``),
+            or ``None`` when ``at_tick`` is set (deferred; result unavailable).
+
+        Raises:
+            ValueError: If ``at_tick <= core.tick``.
+        """
+        if at_tick is not None:
+            self._defer(
+                at_tick,
+                factory=lambda: self.__core_real.hooks.execute(
+                    name,
+                    *args,
+                    firstresult=firstresult,
+                    plugin_id=str(self._metadata.id),
+                    **kwargs,
+                ),
+            )
+            return None
+        return self.__core_real.hooks.execute(
+            name,
+            *args,
+            firstresult=firstresult,
+            plugin_id=str(self._metadata.id),
+            **kwargs,
+        )
 
     def has_subscribers(self, event_name: str) -> bool:
         """True if someone is listening for event_name (mute-aware).
@@ -518,8 +519,7 @@ class Plugin(PluginProtocol):
         Lookup order:
           1. Plugin-scoped values (from core._plugin_configs[plugin_name])
           2. Schema default (if declared)
-          3. CoreConfig attributes (existing behaviour, unchanged)
-          4. Provided default argument
+          3. Provided default argument
 
         Args:
             key: Configuration attribute name
@@ -539,8 +539,7 @@ class Plugin(PluginProtocol):
             if field.default is not REQUIRED:
                 return field.default
 
-        # 3. CoreConfig fallback (existing behaviour)
-        return getattr(self.__core_real.config, key, default)
+        return default
 
     @overload
     async def get_capability(self, capability: type[_T], *, tag: str | None = None) -> _T: ...
@@ -608,19 +607,17 @@ class Plugin(PluginProtocol):
         **extra: Any,
     ) -> None:
         """Fire-and-forget publication of a core.plugin_error event."""
-        payload = {
-            "plugin_id": str(self._metadata.id),
-            "plugin_name": self._metadata.name,
-            "source": source,
-            "error": str(error),
-            "error_type": type(error).__name__ if error is not None else "",
-            **extra,
-        }
         try:
             asyncio.get_running_loop().create_task(
-                self.__core_real.events.publish(Event("core.plugin_error", payload))
+                self.__core_real.events.publish(
+                    build_plugin_error_event(
+                        str(self._metadata.id),
+                        self._metadata.name,
+                        source,
+                        error,
+                        **extra,
+                    )
+                )
             )
         except Exception:
             logger.debug("Failed to publish core.plugin_error", exc_info=True)
-
-    # ========= Internal Helpers ==========

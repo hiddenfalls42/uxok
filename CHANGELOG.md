@@ -92,6 +92,16 @@ commit as its CHANGELOG entry.
   scripts are pruned (tests are intentionally excluded from the sdist for leanness).
 
 ### Changed
+- **Breaking (pre-1.0):** `Plugin.hook` is now a class-level method instead of an
+  instance-attribute closure assigned in `__init__`. The call signature is identical;
+  subclasses that override `hook` or depend on `Plugin.__init__` assigning `self.hook`
+  must be updated. `emit` and `hook` share a new `_defer(at_tick, factory)` helper that
+  eliminates the duplicated tick-validation logic.
+- **Breaking (pre-1.0):** `Plugin.config()` no longer falls through to `CoreConfig` as a
+  last resort. The lookup order is now: (1) plugin-scoped `plugin_configs` value; (2) schema
+  default; (3) the `default` argument. Plugins that previously read `CoreConfig` fields by
+  name (e.g. `self.config("tick_rate")`) now receive the `default` argument instead. Use
+  `self.core.config.<field>` directly for kernel-wide settings.
 - **Breaking (pre-1.0):** the kernel no longer auto-starts on first plugin registration. `register_plugin`, `load_plugin`, and hot-reload now require the core to be `RUNNING` and raise `CoreError` otherwise. Call `core.start()` (or use `async with Core() as core:`) before registering plugins. The context-manager path and already-started cores are unaffected — hosts that already start explicitly see no behavioral change.
 - **Breaking (pre-1.0):** plugin construction is now coreless (RFC 0001 §3.2.3). The core
   is no longer a constructor argument; the kernel attaches it at register/reload time, so
@@ -127,6 +137,12 @@ commit as its CHANGELOG entry.
   bumped with the changelog un-rolled.
 
 ### Removed
+- **Breaking (pre-1.0):** removed `@handle_errors` decorator and all supporting
+  helpers (`_error_context`, `_handle`, `_log`) from `uxok.plugin`. The decorator
+  was zero-usage in the kernel and example code, and encouraged hiding exceptions
+  rather than handling them intentionally. Replacement: use `try/except` directly in
+  your method body and call `self._emit_plugin_error(source, error, **extra)` for the
+  standard `core.plugin_error` signal. See §15 of `docs/manifests/API.md`.
 - **Breaking (pre-1.0):** removed the `blocked_plugins` config field and the
   `Registry.block()`/`unblock()`/`is_blocked()` methods. There is no longer a kernel-level
   plugin blocklist. Hosts must enforce admission policy before calling `register_plugin()`.

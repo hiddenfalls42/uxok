@@ -107,14 +107,14 @@ class TestCoreCapabilities:
 
     @pytest.mark.asyncio
     async def test_get_capability_info(self, started_core):
-        # get_capability_info is internal (capability-system) detail; no longer
-        # on the public Core surface. Verify the subsystem behaviour directly.
+        # snapshot_capability_info is the internal (capability-system) detail;
+        # get_capability_info was deleted. Verify via the snapshot API.
         core = started_core
         p = Plugin(name="cap_info", provides={"storage"})
         await core.register_plugin(p)
-        info = await core._capability_system.get_capability_info("storage")
-        assert info is not None
-        assert info["name"] == "storage"
+        snapshot = core._capability_system.snapshot_capability_info()
+        assert "storage" in snapshot
+        assert snapshot["storage"].name == "storage"
 
     @pytest.mark.asyncio
     async def test_get_capability_missing_raises(self, clean_core):

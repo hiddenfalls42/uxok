@@ -8,6 +8,12 @@ from uxok.utils import validate_enum_value, validate_identifier, validate_positi
 
 # Standard Python validation - no custom error classes needed
 
+# Canonical set of valid collision policies — imported by _capability_system to avoid
+# duplicating this frozenset in two places.
+CAPABILITY_COLLISION_POLICIES: frozenset[str] = frozenset(
+    {"error_on_conflict", "first_wins", "last_wins_with_warning"}
+)
+
 if TYPE_CHECKING:
     from uxok.protocols.config import CoreConfig
 
@@ -31,7 +37,7 @@ def _validate_capability_config(config: CoreConfig) -> None:
     """Validate capability system configuration fields."""
     validate_enum_value(
         validate_identifier(config.capability_collision, "capability_collision"),
-        {"error_on_conflict", "first_wins", "last_wins_with_warning"},
+        CAPABILITY_COLLISION_POLICIES,
         "capability_collision",
     )
     validate_enum_value(

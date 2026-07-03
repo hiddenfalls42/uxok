@@ -6,8 +6,8 @@ Plugin), the two decorators (event, hook), config-schema construction
 (ConfigField, REQUIRED), and the exceptions the framework raises into caller
 code (CoreError, PluginError, CapabilityError, MissingCapabilityError).
 
-``handle_errors``, the protocol/data types, and the EventBus/HookSystem
-surfaces stay subpackage-only. This list is held explicitly here as an
+Protocol/data types and the EventBus/HookSystem surfaces stay subpackage-only.
+This list is held explicitly here as an
 independent second opinion on the surface; ``test_api_constitution.py`` is the
 doc-driven check that API.md and the code agree.
 """
@@ -93,7 +93,6 @@ class TestOldNamesRejectedAtTopLevel:
         "PluginProtocol",
         "Registry",
         "CapabilitySystem",
-        "handle_errors",
         "on",
     ]
 
@@ -156,17 +155,11 @@ class TestProtocolSubpackageImports:
 
         assert Registry is not None
 
-    def test_capability_system_importable_from_submodule(self) -> None:
-        """CapabilitySystem is importable from uxok.protocols.capability_system."""
-        from uxok.protocols.capability_system import CapabilitySystem
-
-        assert CapabilitySystem is not None
-
 
 class TestPluginSubpackageImports:
     """Plugin subpackage exports decorators and config helpers."""
 
-    @pytest.mark.parametrize("name", ["handle_errors", "ConfigField", "REQUIRED", "hook", "event"])
+    @pytest.mark.parametrize("name", ["ConfigField", "REQUIRED", "hook", "event"])
     def test_plugin_symbol_imports_successfully(self, name: str) -> None:
         """Each demoted plugin symbol must resolve from uxok.plugin."""
 

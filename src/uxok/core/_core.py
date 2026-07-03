@@ -9,12 +9,7 @@ from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
 from uxok.core._capability_system import CapabilityPolicy, CapabilitySystem
-from uxok.core._shared_utils import (
-    drain_plugin_resources,
-    format_plugin_error,
-    log_op,
-    resolve_plugin,
-)
+from uxok.core._shared_utils import drain_plugin_resources
 from uxok.core._state_manager import StateManager
 from uxok.errors import CapabilityError, CoreError, PluginError
 from uxok.events._bus import _EventBus
@@ -32,8 +27,10 @@ from uxok.protocols._types import PluginId
 from uxok.protocols.events import EventBus
 from uxok.protocols.hooks import HookSystem
 from uxok.protocols.registry import Registry
+from uxok.registry._resolve import resolve_plugin
 from uxok.timing._clock import TickClock
 from uxok.timing._scheduler import TickScheduler
+from uxok.utils import build_plugin_error_event, format_plugin_error, log_op
 
 if TYPE_CHECKING:
     from uxok.registry._plugin_view import PluginCollection
@@ -362,16 +359,12 @@ class Core(CoreProtocol):
         except Exception as e:
             with suppress(Exception):
                 await self._event_bus.publish(
-                    Event(
-                        "core.plugin_error",
-                        {
-                            "plugin_id": str(plugin_id),
-                            "plugin_name": plugin.metadata.name,
-                            "source": "lifecycle",
-                            "phase": "register",
-                            "error": str(e),
-                            "error_type": type(e).__name__,
-                        },
+                    build_plugin_error_event(
+                        str(plugin_id),
+                        plugin.metadata.name,
+                        "lifecycle",
+                        e,
+                        phase="register",
                     )
                 )
             with suppress(Exception):
@@ -454,7 +447,7 @@ class Core(CoreProtocol):
         # exec (so the import machinery can resolve siblings) and removed in the
         # finally — top-level imports are already bound into the module namespace,
         # so the loaded plugin keeps working and sys.modules stays clean.
-        pkg_name = f"_orion_plugin_{uuid4().hex}"
+        pkg_name = f"_uxok_plugin_{uuid4().hex}"
         module = types.ModuleType(pkg_name)
         # Inject Plugin into the module namespace
         module.__dict__["Plugin"] = Plugin
@@ -776,16 +769,12 @@ class Core(CoreProtocol):
                 )
                 with suppress(Exception):
                     await self._event_bus.publish(
-                        Event(
-                            "core.plugin_error",
-                            {
-                                "plugin_id": str(old_plugin.metadata.id),
-                                "plugin_name": old_plugin.metadata.name,
-                                "source": "lifecycle",
-                                "error": str(e),
-                                "error_type": type(e).__name__,
-                                "phase": "on_stop",
-                            },
+                        build_plugin_error_event(
+                            str(old_plugin.metadata.id),
+                            old_plugin.metadata.name,
+                            "lifecycle",
+                            e,
+                            phase="on_stop",
                         )
                     )
 
@@ -888,7 +877,7 @@ class Core(CoreProtocol):
             return LifecycleFacet(self)
         try:
             return await self._capability_system.get_capability(capability, tag=tag)
-        except KeyError:
+        except CapabilityError:
             from uxok.utils import derive_capability_name
 
             cap_name = (

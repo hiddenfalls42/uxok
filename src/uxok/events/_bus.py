@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any
 
 from uxok.events._subscriptions import SubscriptionManager
 from uxok.protocols import CoreConfig, Event
+from uxok.utils import build_plugin_error_event
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -120,15 +121,12 @@ class _EventBus:
                 return
             try:
                 await self.publish(
-                    Event(
-                        "core.plugin_error",
-                        {
-                            "plugin_id": str(plugin_id) if plugin_id else "",
-                            "source": "event_handler",
-                            "event_name": event.name,
-                            "error": str(e),
-                            "error_type": type(e).__name__,
-                        },
+                    build_plugin_error_event(
+                        str(plugin_id) if plugin_id else "",
+                        "",
+                        "event_handler",
+                        e,
+                        event_name=event.name,
                     )
                 )
             except Exception:

@@ -8,12 +8,10 @@ from uxok.core._shared_utils import (
     format_capability_error,
     format_plugin_error,
     log_op,
-    log_plugin_op,
     resolve_plugin,
 )
 from uxok.utils import (
     AsyncTaskManager,
-    locked,
     log_context,
     safe_str,
     sanitize_identifier,
@@ -21,20 +19,6 @@ from uxok.utils import (
     validate_identifier,
     validate_positive_number,
 )
-
-
-@pytest.mark.asyncio
-async def test_locked_releases_on_exception():
-    lock = asyncio.Lock()
-
-    async def use_lock():
-        async with locked(lock):
-            assert lock.locked()
-            raise RuntimeError("boom")
-
-    with pytest.raises(RuntimeError):
-        await use_lock()
-    assert not lock.locked()
 
 
 @pytest.mark.asyncio
@@ -114,28 +98,6 @@ async def test_drain_plugin_resources_runs_all_steps():
     assert plugin_task.cancelled()
 
 
-@pytest.mark.asyncio
-async def test_async_task_manager_cleanup_task():
-    manager = AsyncTaskManager()
-
-    async def quick_task():
-        return "done"
-
-    task = await manager.create_task(quick_task(), name="quick")
-    await task  # Wait for completion
-    await manager.cleanup_task(task)
-    assert task not in manager._tasks
-
-
-@pytest.mark.asyncio
-async def test_async_task_manager_cleanup_cancelled_task():
-    manager = AsyncTaskManager()
-    task = await manager.create_task(asyncio.sleep(100), name="slow")
-    task.cancel()
-    await manager.cleanup_task(task)
-    assert task not in manager._tasks
-
-
 @pytest.mark.parametrize("value", [0, -1, -1.0, float("inf"), float("nan")])
 def test_validate_positive_number_rejects_bad_values(value):
     with pytest.raises(ValueError):
@@ -189,23 +151,6 @@ def test_log_op():
     result = log_op("test_op", foo="bar")
     assert result["operation"] == "test_op"
     assert result["foo"] == "bar"
-
-
-def test_log_plugin_op():
-    class Meta:
-        id = "123"
-        name = "test_plugin"
-        version = "1.0.0"
-
-    class Plugin:
-        metadata = Meta()
-
-    result = log_plugin_op("register", Plugin(), extra_key="val")
-    assert result["operation"] == "register"
-    assert result["plugin_id"] == "123"
-    assert result["plugin_name"] == "test_plugin"
-    assert result["plugin_version"] == "1.0.0"
-    assert result["extra_key"] == "val"
 
 
 def test_format_capability_error():

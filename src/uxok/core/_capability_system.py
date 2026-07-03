@@ -435,50 +435,6 @@ class CapabilitySystem:
         """List all available capability names."""
         return list(self._capabilities.keys())
 
-    async def get_capability_info(self, capability: str) -> dict | None:
-        """Get detailed information about a capability.
-
-        When a Protocol type is associated with the capability, the info dict
-        includes a ``protocol`` key with the protocol's method signatures for
-        agent introspection.
-        """
-        if capability not in self._capabilities or not self._capabilities[capability]:
-            return None
-
-        providers = self._capabilities[capability]
-        selected = self._select_provider(providers)
-
-        provider_info = [
-            {
-                "name": p.metadata.name,
-                "id": str(p.metadata.id),
-                "version": p.metadata.version,
-                "description": p.metadata.description,
-                "tags": sorted(p.metadata.tags),
-            }
-            for p in providers
-        ]
-
-        info: dict[str, Any] = {
-            "name": capability,
-            "selected_provider": selected.metadata.name,
-            "selected_provider_id": str(selected.metadata.id),
-            "selected_version": selected.metadata.version,
-            "selected_description": selected.metadata.description,
-            "all_providers": provider_info,
-            "provider_count": len(providers),
-            "typed": capability in self._protocol_types,
-        }
-
-        protocol = self._protocol_types.get(capability)
-        if protocol is not None:
-            info["protocol"] = {
-                "name": protocol.__name__,
-                "methods": get_protocol_methods(protocol),
-            }
-
-        return info
-
     async def unregister_capabilities_by_plugin(self, plugin_id: str) -> list[str]:
         """Unregister all capabilities provided by a specific plugin.
 

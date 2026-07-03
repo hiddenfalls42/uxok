@@ -1,4 +1,4 @@
-"""Generic utility helpers for validation, sanitization, locking, and async tasks."""
+"""Generic utility helpers for validation, sanitization, and async tasks."""
 
 from __future__ import annotations
 
@@ -6,23 +6,12 @@ import asyncio
 import logging
 import math
 import re
-from collections.abc import AsyncIterator, Coroutine, Iterable
-from contextlib import asynccontextmanager, suppress
+from collections.abc import Coroutine, Iterable
+from contextlib import suppress
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from collections.abc import Callable
-
-
-@asynccontextmanager
-async def locked(lock: asyncio.Lock | asyncio.Semaphore) -> AsyncIterator[None]:
-    """Async context manager that acquires and releases the given lock."""
-    await lock.acquire()
-    try:
-        yield
-    finally:
-        with suppress(Exception):
-            lock.release()
 
 
 def validate_identifier(value: str, field_name: str) -> str:
@@ -149,17 +138,6 @@ class AsyncTaskManager:
             if not task.done():
                 task.cancel()
         await self._await_all(timeout=timeout)
-
-    async def cleanup_task(self, task: asyncio.Task[Any]) -> None:
-        """Await a single task safely and remove it from tracking."""
-        with suppress(asyncio.CancelledError):
-            try:
-                await asyncio.wait_for(task, timeout=5.0)
-            except TimeoutError:
-                task.cancel()
-                with suppress(asyncio.CancelledError):
-                    await task
-        self._tasks.discard(task)
 
     async def _await_all(self, timeout: float) -> None:  # noqa: ASYNC109 — bounded cleanup API
         """Internal helper to await all tracked tasks."""

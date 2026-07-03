@@ -155,12 +155,6 @@ class TestProtocolSubpackageImports:
 
         assert Registry is not None
 
-    def test_capability_system_importable_from_submodule(self) -> None:
-        """CapabilitySystem is importable from uxok.protocols.capability_system."""
-        from uxok.protocols.capability_system import CapabilitySystem
-
-        assert CapabilitySystem is not None
-
 
 class TestPluginSubpackageImports:
     """Plugin subpackage exports decorators and config helpers."""

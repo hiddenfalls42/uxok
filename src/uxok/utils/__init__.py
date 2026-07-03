@@ -11,7 +11,6 @@ from ._capability_utils import (
 from ._helpers import (
     AsyncTaskManager,
     camel_to_snake,
-    locked,
     log_context,
     safe_str,
     sanitize_identifier,
@@ -28,7 +27,6 @@ __all__ = [
     "derive_capability_name",
     "get_instance_methods",
     "get_protocol_methods",
-    "locked",
     "log_context",
     "normalize_capability_set",
     "safe_str",

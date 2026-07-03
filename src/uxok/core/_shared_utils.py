@@ -132,18 +132,6 @@ def log_op(operation: str, **kwargs: Any) -> dict[str, Any]:
     return log_context(operation=operation, **kwargs)
 
 
-def log_plugin_op(operation: str, plugin: Any, **extra: Any) -> dict[str, Any]:
-    """Structured log payload for plugin-scoped operations."""
-    meta = getattr(plugin, "metadata", None)
-    ctx: dict[str, Any] = {"operation": operation}
-    if meta:
-        ctx["plugin_id"] = str(getattr(meta, "id", ""))
-        ctx["plugin_name"] = getattr(meta, "name", "")
-        ctx["plugin_version"] = getattr(meta, "version", "")
-    ctx.update(extra)
-    return ctx
-
-
 def format_capability_error(capability: str | list[str], available: list[str] | None = None) -> str:
     """Consistent capability error formatting."""
     missing = ", ".join(sorted(capability)) if isinstance(capability, list) else capability

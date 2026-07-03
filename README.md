@@ -18,7 +18,7 @@ pip install uxok
 ```
 
 ## Quick start
-Basic functionality in a single script. The same example as a proper modular host — one plugin per file, with a plugin hot-reloaded live — is in [`examples/example_host/`](https://github.com/hiddenfalls42/uxok/tree/main/examples/example_host).
+Basic functionality in a single script. The same example as a modular host is in [`examples/example_host/`](https://github.com/hiddenfalls42/uxok/tree/main/examples/example_host).
 
 ```python
 import asyncio

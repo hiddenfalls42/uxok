@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-from uxok.utils import camel_to_snake, sanitize_identifier, validate_identifier
+from uxok.utils import camel_to_snake, validate_identifier
 
 
 def detect_plugin_name(class_name: str) -> str:
@@ -29,6 +29,5 @@ def validate_plugin_name(name: str) -> None:
         ValueError: If name is invalid
     """
     validated = validate_identifier(name, "PluginProtocol name")
-    sanitized = sanitize_identifier(validated, "PluginProtocol name")
-    if not re.match(r"^[a-z][a-z0-9_]*$", sanitized):
+    if not re.match(r"^[a-z][a-z0-9_]*$", validated):
         raise ValueError(f"PluginProtocol name must be snake_case (a-z, 0-9, _): got '{name}'")

@@ -1,6 +1,6 @@
 # Plugin architecture
 
-uxok is a microkernel. The kernel provides five primitives — the event bus, the hook system, the plugin registry, the capability system, and the plugin base class — and then steps back. Every feature beyond those five is a plugin: a self-contained unit that declares what it needs, what it offers, and how it reacts to the world around it. The architecture described here is why that model works and what it costs.
+uxok is a microkernel. The kernel provides six primitives — the event bus, the hook system, the plugin registry, the capability system, the plugin base class, and the timing system — and then steps back. Every feature beyond those six is a plugin: a self-contained unit that declares what it needs, what it offers, and how it reacts to the world around it. The architecture described here is why that model works and what it costs.
 
 ## Why plugins, not modules
 

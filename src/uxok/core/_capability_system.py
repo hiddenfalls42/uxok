@@ -7,13 +7,10 @@ from dataclasses import dataclass
 from functools import cache
 from typing import TYPE_CHECKING, Any
 
-from uxok.core._shared_utils import (
-    format_capability_error,
-    log_op,
-)
-from uxok.errors import CapabilityAccessError, MissingCapabilityError, PluginError
+from uxok._config_validation import CAPABILITY_COLLISION_POLICIES
+from uxok.errors import CapabilityAccessError, CapabilityError, MissingCapabilityError, PluginError
 from uxok.registry._plugin_view import CapabilityInfo
-from uxok.utils import derive_capability_name, get_protocol_methods
+from uxok.utils import derive_capability_name, get_protocol_methods, log_op
 from uxok.utils._capability_utils import signature_incompatibility
 
 if TYPE_CHECKING:
@@ -78,10 +75,6 @@ class CapabilitySystem:
         # await inside a mutation, reintroduce a lock around that section.
         self._policy = policy
 
-    _VALID_COLLISION_POLICIES = frozenset(
-        {"error_on_conflict", "last_wins_with_warning", "first_wins"}
-    )
-
     def _select_provider(self, providers: list[Any]) -> Any:
         """Select a provider from a list using the configured selection policy."""
         if self._policy.capability_selection == "last_registered":
@@ -91,7 +84,7 @@ class CapabilitySystem:
     def _resolve_collision_policy(self) -> str:
         """Return the active collision policy, defaulting unknown values safely."""
         policy = self._policy.capability_collision
-        if policy not in self._VALID_COLLISION_POLICIES:
+        if policy not in CAPABILITY_COLLISION_POLICIES:
             logger.warning(
                 "Unknown capability_collision policy %r; defaulting to error_on_conflict",
                 policy,
@@ -101,8 +94,10 @@ class CapabilitySystem:
 
     def _collision_error(self, capability: str, providers: list[Any]) -> PluginError:
         """Build a consistent collision PluginError for a capability."""
+        names = ", ".join(sorted(p.metadata.name for p in providers))
         return PluginError(
-            format_capability_error(capability, [p.metadata.name for p in providers])
+            f"Capability '{capability}' is already provided by: {names} "
+            f"(capability_collision='error_on_conflict')"
         )
 
     def _protocol_contract_violation(self, plugin: Any, protocol: type) -> str | None:
@@ -187,7 +182,7 @@ class CapabilitySystem:
             policy = self._policy.capability_missing
             if policy == "return_none":
                 return None
-            raise KeyError(format_capability_error(capability, None))
+            raise CapabilityError(capability)
 
         providers = self._capabilities[capability]
 
@@ -195,9 +190,10 @@ class CapabilitySystem:
             filtered = [p for p in providers if tag in p.metadata.tags]
             if not filtered:
                 all_tags = sorted({t for p in providers for t in p.metadata.tags})
-                raise KeyError(
-                    f"No provider for capability '{capability}' has tag '{tag}'. "
-                    f"Provider tags: {all_tags}"
+                raise CapabilityError(
+                    capability,
+                    message=f"No provider for capability '{capability}' has tag '{tag}'. "
+                    f"Provider tags: {all_tags}",
                 )
             providers = filtered
 
@@ -434,50 +430,6 @@ class CapabilitySystem:
     async def list_capabilities(self) -> list[str]:
         """List all available capability names."""
         return list(self._capabilities.keys())
-
-    async def get_capability_info(self, capability: str) -> dict | None:
-        """Get detailed information about a capability.
-
-        When a Protocol type is associated with the capability, the info dict
-        includes a ``protocol`` key with the protocol's method signatures for
-        agent introspection.
-        """
-        if capability not in self._capabilities or not self._capabilities[capability]:
-            return None
-
-        providers = self._capabilities[capability]
-        selected = self._select_provider(providers)
-
-        provider_info = [
-            {
-                "name": p.metadata.name,
-                "id": str(p.metadata.id),
-                "version": p.metadata.version,
-                "description": p.metadata.description,
-                "tags": sorted(p.metadata.tags),
-            }
-            for p in providers
-        ]
-
-        info: dict[str, Any] = {
-            "name": capability,
-            "selected_provider": selected.metadata.name,
-            "selected_provider_id": str(selected.metadata.id),
-            "selected_version": selected.metadata.version,
-            "selected_description": selected.metadata.description,
-            "all_providers": provider_info,
-            "provider_count": len(providers),
-            "typed": capability in self._protocol_types,
-        }
-
-        protocol = self._protocol_types.get(capability)
-        if protocol is not None:
-            info["protocol"] = {
-                "name": protocol.__name__,
-                "methods": get_protocol_methods(protocol),
-            }
-
-        return info
 
     async def unregister_capabilities_by_plugin(self, plugin_id: str) -> list[str]:
         """Unregister all capabilities provided by a specific plugin.

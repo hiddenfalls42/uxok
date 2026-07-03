@@ -72,7 +72,10 @@ class TestPluginConvenience:
     async def test_config_accessor(self, clean_core: Core):
         p = Plugin(name="config_test")
         p._attach_core(clean_core)
-        assert p.config("tick_rate") == 1000
+        # CoreConfig fields are not accessible via plugin.config() — they are
+        # kernel-internal; plugin config is scoped to the plugin namespace only.
+        assert p.config("tick_rate") is None
+        assert p.config("tick_rate", 999) == 999
         assert p.config("nonexistent", "default") == "default"
 
     @pytest.mark.asyncio

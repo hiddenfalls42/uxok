@@ -1,4 +1,4 @@
-"""Core-internal shared utilities for lifecycle, logging, and validation."""
+"""Core-internal shared utilities: plugin resource lifecycle drain only."""
 
 from __future__ import annotations
 
@@ -6,10 +6,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from uxok.protocols.events import Event
-from uxok.utils import (
-    log_context,
-    safe_str,
-)
+from uxok.utils import safe_str
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -100,65 +97,3 @@ async def drain_plugin_resources(
         logger.debug("Cancelled background tasks", extra={"plugin_id": plugin_id})
 
     logger.debug("Resource drain completed", extra={"plugin_id": plugin_id})
-
-
-async def resolve_plugin(plugin_id: Any, registry: Any) -> tuple[Any, Any]:
-    """Resolve a plugin by ID (UUID) or name string.
-
-    Args:
-        plugin_id: Plugin UUID, UUID string, or name string
-        registry: Registry with get() and all() methods
-
-    Returns:
-        Tuple of (resolved_plugin_or_None, resolved_plugin_id)
-    """
-    if isinstance(plugin_id, str):
-        try:
-            import uuid
-
-            parsed = uuid.UUID(plugin_id)
-            return await registry.get(parsed), parsed
-        except ValueError:
-            # Not a UUID — treat as plugin name
-            for p in (await registry.all()).values():
-                if p.metadata.name == plugin_id:
-                    return p, p.metadata.id
-            return None, plugin_id
-    return await registry.get(plugin_id), plugin_id
-
-
-def log_op(operation: str, **kwargs: Any) -> dict[str, Any]:
-    """Standard structured log payload for any operation."""
-    return log_context(operation=operation, **kwargs)
-
-
-def log_plugin_op(operation: str, plugin: Any, **extra: Any) -> dict[str, Any]:
-    """Structured log payload for plugin-scoped operations."""
-    meta = getattr(plugin, "metadata", None)
-    ctx: dict[str, Any] = {"operation": operation}
-    if meta:
-        ctx["plugin_id"] = str(getattr(meta, "id", ""))
-        ctx["plugin_name"] = getattr(meta, "name", "")
-        ctx["plugin_version"] = getattr(meta, "version", "")
-    ctx.update(extra)
-    return ctx
-
-
-def format_capability_error(capability: str | list[str], available: list[str] | None = None) -> str:
-    """Consistent capability error formatting."""
-    missing = ", ".join(sorted(capability)) if isinstance(capability, list) else capability
-    if available:
-        return f"Capability '{missing}' not available. Available: {', '.join(sorted(available))}"
-    return f"Capability '{missing}' not available."
-
-
-def format_plugin_error(
-    plugin_id: str,
-    reason: str,
-    available_options: list[str] | None = None,
-) -> str:
-    """Consistent plugin error formatting."""
-    base = f"Plugin {plugin_id}: {reason}"
-    if available_options:
-        return f"{base}. Options: {', '.join(sorted(available_options))}"
-    return base

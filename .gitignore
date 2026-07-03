@@ -84,11 +84,9 @@ plans/
 # (Re-add deliberately if you ever want to showcase the AI setup.)
 .claude/
 docs/agent_data/
-scripts/dev_utilities/
 
 # Manifests: only the programmatically-tested API.md is public for now.
-docs/manifests/FRAMEWORK_PHILOSOPHY.md
-docs/manifests/KERNEL_ARCHITECTURE.md
+# (FRAMEWORK_PHILOSOPHY.md and KERNEL_ARCHITECTURE.md are retired tombstones — now tracked.)
 # Design RFCs: internal process, kept local for now.
 docs/proposals/
 

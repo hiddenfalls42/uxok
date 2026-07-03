@@ -1,4 +1,4 @@
-"""Generic utility helpers for validation, sanitization, locking, and async tasks."""
+"""Generic utility helpers for validation, sanitization, and async tasks."""
 
 from __future__ import annotations
 
@@ -6,23 +6,12 @@ import asyncio
 import logging
 import math
 import re
-from collections.abc import AsyncIterator, Coroutine, Iterable
-from contextlib import asynccontextmanager, suppress
+from collections.abc import Coroutine, Iterable
+from contextlib import suppress
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from collections.abc import Callable
-
-
-@asynccontextmanager
-async def locked(lock: asyncio.Lock | asyncio.Semaphore) -> AsyncIterator[None]:
-    """Async context manager that acquires and releases the given lock."""
-    await lock.acquire()
-    try:
-        yield
-    finally:
-        with suppress(Exception):
-            lock.release()
 
 
 def validate_identifier(value: str, field_name: str) -> str:
@@ -58,18 +47,6 @@ def validate_enum_value(value: str, valid_values: Iterable[str], field_name: str
     if value not in values:
         raise ValueError(f"{field_name} must be one of {sorted(values)}: got '{value}'")
     return value
-
-
-def sanitize_identifier(value: str, field_name: str) -> str:
-    """Sanitize a user-provided identifier by trimming and normalizing."""
-    if not isinstance(value, str):
-        raise ValueError(f"{field_name} must be a string")
-    trimmed = value.strip()
-    # Replace any disallowed character with underscore
-    sanitized = re.sub(r"[^A-Za-z0-9_.-]", "_", trimmed)
-    if not sanitized:
-        raise ValueError(f"{field_name} cannot be empty after sanitization")
-    return sanitized
 
 
 def camel_to_snake(name: str) -> str:
@@ -149,17 +126,6 @@ class AsyncTaskManager:
             if not task.done():
                 task.cancel()
         await self._await_all(timeout=timeout)
-
-    async def cleanup_task(self, task: asyncio.Task[Any]) -> None:
-        """Await a single task safely and remove it from tracking."""
-        with suppress(asyncio.CancelledError):
-            try:
-                await asyncio.wait_for(task, timeout=5.0)
-            except TimeoutError:
-                task.cancel()
-                with suppress(asyncio.CancelledError):
-                    await task
-        self._tasks.discard(task)
 
     async def _await_all(self, timeout: float) -> None:  # noqa: ASYNC109 — bounded cleanup API
         """Internal helper to await all tracked tasks."""

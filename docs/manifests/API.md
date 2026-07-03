@@ -85,9 +85,9 @@ exceptions the framework raises *into* caller code (`CoreError`, `PluginError`,
 *re-exported* here; their definition homes are `uxok.plugin` and
 `uxok.errors`, both of which remain importable.
 
-Everything else stays subpackage-only by design: `handle_errors` (advanced, in
-`uxok.plugin`), `Event`/`CoreConfig`/protocol types (in `uxok.protocols`),
-and the `EventBus`/`HookSystem` surfaces (reached via `core.events`/`core.hooks`).
+Everything else stays subpackage-only by design: `Event`/`CoreConfig`/protocol
+types (in `uxok.protocols`), and the `EventBus`/`HookSystem` surfaces (reached
+via `core.events`/`core.hooks`).
 
 **The line is drawn by *use*, not by tidiness.** A name is top-level iff author or host
 code must *write it* to do its job — one of:
@@ -109,7 +109,7 @@ code never writes `CoreConfig`; only reflective field introspection imports it.
 
 ## 2. Core
 
-`class Core(CoreProtocol)` — `src/uxok/core/_core.py:51`.
+`class Core(CoreProtocol)` — `src/uxok/core/_core.py:81`.
 Re-exported at `uxok.core.Core` and `uxok.Core`.
 
 ### 2.1 Constructor
@@ -119,7 +119,7 @@ def __init__(self, **kwargs: Any) -> None
 ```
 
 `Core` takes `**kwargs` only. There are no explicit positional or keyword parameters.
-kwargs are forwarded verbatim to `CoreConfig(**kwargs)` (`_core.py:87`); validation
+kwargs are forwarded verbatim to `CoreConfig(**kwargs)` (`_core.py:107`); validation
 happens in `CoreConfig.__post_init__`. Any kwarg not a `CoreConfig` field raises
 `TypeError` from the dataclass. Accepted kwargs are exactly the `CoreConfig` fields:
 
@@ -210,7 +210,7 @@ Notes:
 
 ## 3. Plugin
 
-`class Plugin(PluginProtocol)` — `src/uxok/plugin/_base.py:27`.
+`class Plugin(PluginProtocol)` — `src/uxok/plugin/_base.py:31`.
 Exported from `uxok.plugin` and top-level `uxok`.
 
 ### 3.1 Constructor
@@ -218,7 +218,7 @@ Exported from `uxok.plugin` and top-level `uxok`.
 Construction is **coreless**: the kernel attaches `self.core` *after* construction (at
 register/reload), so it is available from `on_start` onward, not inside `__init__` (RFC 0001
 §3.2.3). There is no `core` constructor argument; all parameters are keyword-only (`*,` at
-`_base.py:69`).
+`_base.py:66`).
 
 ```python
 def __init__(
@@ -274,7 +274,7 @@ to `snake_case` and strips common plugin-suffix words (e.g. `DataProcessor` → 
 | `has_subscribers` | `def has_subscribers(self, event_name: str) -> bool` | `bool` | — |
 | `subscribe` | `async def subscribe(self, event_pattern: str, handler: Callable) -> None` | `None` | — |
 | `register_hook` | `async def register_hook(self, hook_name: str, handler: Callable, *, priority: int = 0) -> None` | `None` | — |
-| `hook` | `hook(name: str, *args, at_tick: int \| None = None, firstresult: bool = False, **kwargs) -> Any` (instance attribute, not a `def`) | list of results, or first non-`None` when `firstresult=True`; `None` when `at_tick` is set (deferred, fire-and-forget) | `ValueError` if `at_tick <= core.tick` |
+| `hook` | `def hook(self, name: str, *args, at_tick: int \| None = None, firstresult: bool = False, **kwargs) -> Any` | list of results, or first non-`None` when `firstresult=True`; `None` when `at_tick` is set (deferred, fire-and-forget) | `ValueError` if `at_tick <= core.tick` |
 | `config` | `def config(self, key: str, default: Any = None) -> Any` | `Any` | — |
 | `get_capability` | `async def get_capability(self, capability: str \| type, *, tag: str \| None = None) -> Any` | `Any` / typed `_T` (two `@overload`s) | `CapabilityError`; `CapabilityAccessError` under `capability_access="declared"`/`"sealed"` if not in the runtime grant `requires ∪ resolves` |
 | `get_state` | `async def get_state(self) -> dict` | `dict` (default `{}`) | — |
@@ -300,11 +300,10 @@ Notes:
   payload construction: ``if self.has_subscribers(name): await self.emit(name, build())``.
   `mute`/`unmute` remain host-only on `core.events`; `has_subscribers` is surfaced here
   so plugin authors do not need to reach through `core.events` for the common guard case.
-- `hook` is an instance attribute assigned a closure in `__init__`, not a class-level
-  `def`. When `at_tick` is `None`, it executes immediately and returns results (list, or
-  first non-`None` when `firstresult=True`). When `at_tick` is set, execution is deferred
-  to that tick and `None` is returned (fire-and-forget); raises `ValueError` if
-  `at_tick <= core.tick`.
+- `hook` is a class-level method. When `at_tick` is `None`, it executes immediately and
+  returns results (list, or first non-`None` when `firstresult=True`). When `at_tick` is
+  set, execution is deferred to that tick and `None` is returned (fire-and-forget); raises
+  `ValueError` if `at_tick <= core.tick`. Internally shares a `_defer` helper with `emit`.
 - There is no recurring-execution primitive. Periodic work is built by self-rescheduling:
   a handler re-arms itself with `emit(at_tick=core.tick + N)` or
   `hook(name, at_tick=core.tick + N)`.
@@ -384,6 +383,11 @@ Notes:
   under `"declared"`/`"sealed"` reaches the admission probe as `self.core.check_plugin(...)`,
   not only through the `_Plugin__core_real` reflection escape. It is *not* on `LifecycleFacet`:
   a probe-only consumer (a gate) must not take graph-mutation authority to ask a question.
+- `config(key, default=None)` resolves through **three sources** in order: (1) plugin-scoped
+  value from `plugin_configs[plugin_name][key]`; (2) schema default from
+  `config_schema[key].default` when a schema is declared; (3) the `default` argument. It does
+  **not** fall through to `CoreConfig` — use `core.config.<field>` directly if a plugin needs
+  a kernel-wide setting.
 
 ### 3.3 Properties
 
@@ -396,11 +400,10 @@ Notes:
 
 ## 4. Decorators
 
-Defined in `uxok.plugin` (`hook`, `event`, `handle_errors`). `hook` and `event`
-are re-exported at top-level `uxok`, which is the **canonical author path**
-(`from uxok import event, hook`); the `uxok.plugin` path is the definition
-home and remains valid. These are the same objects reached two ways, not two
-implementations. `handle_errors` is advanced and stays `uxok.plugin`-only.
+Defined in `uxok.plugin` (`hook`, `event`). Both are re-exported at top-level
+`uxok`, which is the **canonical author path** (`from uxok import event, hook`);
+the `uxok.plugin` path is the definition home and remains valid. These are the
+same objects reached two ways, not two implementations.
 
 ### 4.1 `hook`
 
@@ -429,34 +432,6 @@ There is no `typed` parameter.
 | Parameter | Type | Default |
 |---|---|---|
 | `event_pattern` | `str` | (required) |
-
-### 4.3 `handle_errors`
-
-```python
-def handle_errors(
-    emit_event: bool = True,
-    return_on_error: Any = None,
-    log_level: str = "ERROR",
-) -> Callable[[Callable], Callable]
-```
-
-Wraps a method with automatic error catching, logging, and optional event emission.
-
-| Parameter | Type | Default | Notes |
-|---|---|---|---|
-| `emit_event` | `bool` | `True` | Whether to emit an error event on exception |
-| `return_on_error` | `Any` | `None` | Value returned when an exception is caught |
-| `log_level` | `str` | `"ERROR"` | Accepts `"ERROR"`, `"WARNING"`, `"INFO"`; other values silence logging |
-
-**Emitted event name — critical distinction:**
-
-- When wrapping a real `Plugin` instance (object has `_emit_plugin_error`): emits
-  `"core.plugin_error"` with `source="handled_method"`.
-- When wrapping a duck-typed object (has `emit` but no `_emit_plugin_error`): emits
-  `"plugin.error"` as a legacy fallback. Sync wrappers cannot await the emit and
-  only log.
-
-See [§12](#12-framework-event-contracts) for the full `core.plugin_error` payload specification.
 
 ---
 
@@ -939,7 +914,6 @@ from uxok.plugin import (
     ConfigField,
     Plugin,
     event,
-    handle_errors,
     hook,
 )
 ```
@@ -995,8 +969,7 @@ marked as "stable" are guaranteed across all emit sites for that event name.
 
 ### `core.plugin_error`
 
-Emitted when a plugin's event handler, background task, lifecycle step, or
-`@handle_errors`-wrapped method fails.
+Emitted when a plugin's event handler, background task, or lifecycle step fails.
 
 Stable payload keys (present at every emit site):
 
@@ -1004,7 +977,7 @@ Stable payload keys (present at every emit site):
 |---|---|---|
 | `plugin_id` | `str` | Plugin UUID |
 | `plugin_name` | `str` | Plugin name (present at most sites; absent at the raw event-handler path which omits it) |
-| `source` | `str` | Origin of the failure: `"lifecycle"`, `"event_handler"`, `"handled_method"`, or `"background_task"` |
+| `source` | `str` | Origin of the failure: `"lifecycle"`, `"event_handler"`, or `"background_task"` |
 | `error` | `str` | String representation of the exception |
 | `error_type` | `str` | Exception class name |
 
@@ -1014,7 +987,6 @@ Source-dependent extra keys:
 |---|---|
 | `"lifecycle"` | `phase` (e.g. `"register"`, `"start"`, `"on_stop"`) |
 | `"event_handler"` | `event_name` |
-| `"handled_method"` | `method` |
 | `"background_task"` | `task_name` |
 
 Failures inside a `core.plugin_error` handler are logged but not re-reported (no error
@@ -1096,13 +1068,6 @@ executed via `core.hooks.execute("plugin.registered", plugin)` and
 `core.hooks.execute("plugin.unregistered", real_id)`. They do not appear in the event
 bus and are not subscribable with `@event`.
 
-### `plugin.error` — legacy duck-typed fallback
-
-`"plugin.error"` is NOT a kernel framework event for real `Plugin` instances. It is
-emitted only by `@handle_errors` when wrapping a non-`Plugin` object that has an `emit`
-method but lacks `_emit_plugin_error`. Payload: `plugin`, `method`, `error`,
-`error_type`, `timestamp`. This is distinct from `core.plugin_error`.
-
 ---
 
 ## 13. State machine
@@ -1177,6 +1142,9 @@ in step 6 is signalled but does not roll back.
 | `CoreConfig.tick_queue_overflow` | **Removed** | Serial gate queue is gone; no dispatch queue exists |
 | `CoreConfig.blocked_plugins` | **Removed** | No kernel-level plugin blocklist; hosts enforce admission policy before calling `register_plugin()` |
 | `Registry.block` / `unblock` / `is_blocked` | **Removed** | No kernel-level plugin blocklist; hosts enforce admission policy before calling `register_plugin()` |
+| `@handle_errors(...)` / `from uxok.plugin import handle_errors` | **Removed** | Use `try/except` + `self._emit_plugin_error(source, error, **extra)` in `Plugin` subclasses; supervision policy belongs in plugin code |
+| `Plugin.config()` fallthrough to `CoreConfig` | **Removed** | Lookup stops at the `default` argument; reach `CoreConfig` explicitly via `self.core.config.<field>` if needed |
+| `Plugin.hook` as instance attribute (closure) | **Changed to class method** | `Plugin.hook` is now a regular `def hook(self, ...)` class method; call signature is identical |
 
 Zero backward compatibility on all removed names. `on` is completely gone; code
 using `@on(...)` or `from uxok import on` raises `ImportError`. `CoreConfig`

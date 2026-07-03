@@ -36,10 +36,6 @@ Start here — the kernel's core wiring mechanism, where plugins declare what th
 - [Register hook handlers](how-to-register-hook-handlers.md) — Use `@hook()` to provide extension points with a name and optional priority.
 - [Execute hooks](how-to-execute-hooks.md) — Call `plugin.hook()` to invoke handlers in priority order, collect results, or defer to a future tick.
 
-## Error handling
-
-- [Use error handler decorator](how-to-use-error-handler-decorator.md) — Apply `@handle_errors()` for automatic exception logging, fallback return values, and optional `core.plugin_error` event emission.
-
 ## Plugin management
 
 - [Register and manage plugins](how-to-register-and-manage-plugins.md) — Register, unregister, and query plugins by ID, name, or capability using `core.register_plugin()` and `core.list()`.

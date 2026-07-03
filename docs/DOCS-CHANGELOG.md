@@ -2,6 +2,19 @@
 
 <!-- One line per note added, updated, or removed. Format: YYYY-MM-DD | action | path — description -->
 
+2026-07-02 | updated | CLAUDE.md — six-primitive reconciliation: added timing to parenthetical, expanded primitive list to six items, fixed stale tree-diagram entry (gate→removed)
+2026-07-02 | updated | docs/explanation/framework-philosophy.md — eleven→twelve names; added timing system to primitive enumeration
+2026-07-02 | updated | docs/explanation/architecture-overview.md — five→six primitives in opening, microkernel section, and section heading; added timing-system subsection with catch-up policy note
+2026-07-02 | updated | docs/index.md — five→six primitives in opening sentence; reframed "Beyond those primitives" tick paragraph to remove contradiction
+2026-07-02 | updated | docs/explanation/plugin-architecture.md — five→six primitives in opening sentence
+2026-07-02 | added | docs/manifests/FRAMEWORK_PHILOSOPHY.md — tombstone stub redirecting to docs/explanation/framework-philosophy.md
+2026-07-02 | added | docs/manifests/KERNEL_ARCHITECTURE.md — tombstone stub redirecting to docs/explanation/architecture-overview.md
+2026-07-02 | updated | docs/how-to/how-to-use-plugin-configuration.md — removed §4 CoreConfig fallback section; updated lookup table to three sources
+2026-07-02 | updated | docs/manifests/API.md — config() three-source note + §15 Removed row for CoreConfig fallthrough removal
+2026-07-02 | removed | docs/how-to/how-to-use-error-handler-decorator.md — deleted; handle_errors decorator removed from the kernel
+2026-07-02 | updated | docs/how-to/index.md — removed Error handling section and its single bullet
+2026-07-02 | updated | docs/manifests/API.md — removed §4.3 handle_errors, plugin.error legacy section, and related references; added §15 Removed row
+
 2026-06-30 | updated | docs/manifests/API.md — register_plugin/load_plugin raises: added CoreError if not RUNNING; added RUNNING-requirement note
 2026-06-30 | updated | docs/how-to/how-to-manage-core-lifecycle.md — removed the "Register a plugin before starting" section (auto-start removed); renumbered subsequent steps
 2026-06-30 | updated | docs/how-to/how-to-register-and-manage-plugins.md — removed auto-start claim; register example now calls core.start() before register_plugin

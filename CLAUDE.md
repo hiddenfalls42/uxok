@@ -10,8 +10,8 @@ incorrect — no sugarcoating, no praise. NEVER say "you're absolutely right."
 **uxok** is an experimental, hot-loading plugin microkernel for Python, in the spirit of
 the MIT exokernel (mechanism not policy; secure bindings; downloaded policy — but no
 protection boundary between plugins, which share a process). The core provides only
-essential primitives (event bus, hooks, plugin registry, capability system); everything
-else is a plugin.
+essential primitives (event bus, hooks, plugin registry, capability system, and the
+timing system); everything else is a plugin.
 
 ## Constitutional API
 
@@ -57,23 +57,24 @@ pip install -e .[dev]
 way: plugins import the kernel, never the reverse. Enforced by
 `tests/test_imports.py::TestKernelBoundary`.
 
-The core provides **ONLY** these primitives — everything else is a plugin:
+The core provides **ONLY** these six primitives — everything else is a plugin:
 
 1. **Event Bus** — `src/uxok/events/_bus.py` — publish-subscribe inter-plugin comms
 2. **Hook System** — `src/uxok/hooks/_system.py` — priority-ordered extension points
 3. **Plugin Registry** — `src/uxok/registry/impl.py` — registration, lookup, deps
 4. **Capability System** — `src/uxok/core/_capability_system.py` — dependency declarations
 5. **Plugin** — `src/uxok/plugin/_base.py` — developer-experience abstraction
+6. **Timing** — `src/uxok/timing/_clock.py` + `_scheduler.py` — tick clock and at_tick scheduling
 
 ```
 src/uxok/            THE KERNEL (nothing else is)
-├── core/            orchestrator, capability system, state manager
+├── core/            orchestrator, capability system, state manager, loader, hot-reload
 ├── events/          event bus + subscription manager
 ├── hooks/           hook system + cache
 ├── plugin/          plugin base class, decorators, config fields
 ├── protocols/       protocol definitions (the contracts) — a package, not a file
 ├── registry/        registry, proxy/collection introspection
-├── timing/          tick clock, gate, scheduler
+├── timing/          tick clock, scheduler
 └── utils/           helpers, task manager, async primitives
 
 examples/            committed example plugins (e.g. example_host/)

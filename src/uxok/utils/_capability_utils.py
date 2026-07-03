@@ -143,53 +143,6 @@ def get_protocol_methods(protocol: type) -> list[dict[str, Any]]:
     return methods
 
 
-def get_instance_methods(instance: object) -> list[dict[str, Any]]:
-    """Introspect a concrete plugin instance's own public methods.
-
-    Returns the same dict shape as ``get_protocol_methods``
-    (``name, signature, parameters, return_annotation, doc``), but scoped to
-    methods defined on the concrete class — excluding anything inherited from
-    the ``Plugin`` base class (``emit``, ``config``, ``hook``,
-    ``create_background_task``, ``on_start``, ``on_stop``, ``start``,
-    ``stop``, ``get_state``, ``restore_state``, ``get_capability``,
-    ``invalidate_cache``).
-
-    Imported lazily to avoid circular imports (``plugin._base`` → ``utils``).
-    """
-    # Lazy import to avoid circular dependency: plugin._base imports utils.
-    from uxok.plugin._base import Plugin
-
-    base_names = frozenset(
-        name
-        for name in dir(Plugin)
-        if not name.startswith("_") and callable(getattr(Plugin, name, None))
-    )
-
-    cls = type(instance)
-    methods: list[dict[str, Any]] = []
-
-    for attr_name in sorted(dir(cls)):
-        if attr_name.startswith("_"):
-            continue
-        if attr_name in base_names:
-            continue
-
-        attr = getattr(cls, attr_name, None)
-        if attr is None or not callable(attr):
-            continue
-
-        # Prefer the bound method on the instance for an accurate signature.
-        bound = getattr(instance, attr_name, None)
-        if bound is None or not callable(bound):
-            continue
-
-        info = _method_dict(attr_name, bound)
-        if info is not None:
-            methods.append(info)
-
-    return methods
-
-
 def _annotation_str(annotation: Any) -> str:
     """Convert a type annotation to a readable string."""
     if isinstance(annotation, type):

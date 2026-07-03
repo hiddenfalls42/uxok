@@ -2,19 +2,16 @@
 
 from __future__ import annotations
 
-import contextlib
-import functools
 import inspect
 import logging
 from collections.abc import Callable
-from datetime import UTC, datetime
 from typing import Any
 
 logger = logging.getLogger(__name__)
 
 # Marker attribute names
-_HOOK_MARKER = "_orion_hooks"
-_ON_HANDLER_MARKER = "_orion_event_handlers"
+_HOOK_MARKER = "_uxok_hooks"
+_ON_HANDLER_MARKER = "_uxok_event_handlers"
 
 
 def hook(
@@ -92,98 +89,6 @@ def event(event_pattern: str) -> Callable[[Callable], Callable]:
 
         getattr(func, _ON_HANDLER_MARKER).append({"pattern": event_pattern})
         return func
-
-    return decorator
-
-
-def handle_errors(
-    emit_event: bool = True, return_on_error: Any = None, log_level: str = "ERROR"
-) -> Callable[[Callable], Callable]:
-    """Decorator for automatic error handling with failure-signal emission.
-
-    Wraps methods (sync or async — the wrapper matches the wrapped function)
-    to catch exceptions, report them through the framework's standard failure
-    signal, log at the specified level, and return a configured value.
-
-    Args:
-        emit_event: Whether to report the failure. Real Plugin instances emit
-            the standard ``core.plugin_error`` event (source: handled_method);
-            duck-typed objects with only an ``emit`` method fall back to
-            emitting ``plugin.error`` on themselves.
-        return_on_error: Value to return when an exception occurs (default None)
-        log_level: Logging level for errors - "ERROR", "WARNING", or "INFO"
-
-    Example:
-        ```python
-        class MyPlugin(Plugin):
-            @handle_errors(emit_event=True, return_on_error=False)
-            async def save_data(self, data):
-                # Business logic only - no try/catch needed
-                result = await self.database.save(data)
-                return True
-        ```
-    """
-
-    def decorator(func: Callable) -> Callable:
-        def _handle(self: Any, e: Exception) -> Any:
-            if emit_event:
-                if hasattr(self, "_emit_plugin_error"):
-                    # Real Plugin: the framework's standard failure signal.
-                    with contextlib.suppress(Exception):
-                        self._emit_plugin_error("handled_method", e, method=func.__name__)
-                elif hasattr(self, "emit"):
-                    # Duck-typed fallback (legacy behavior). Async emit can only
-                    # be awaited from the async wrapper; see below.
-                    return e  # signal: caller must emit
-            _log(self, e)
-            return None
-
-        def _log(self: Any, e: Exception) -> None:
-            if log_level == "ERROR":
-                logger.error(f"{self.__class__.__name__}.{func.__name__} failed: {e}")
-            elif log_level == "WARNING":
-                logger.warning(f"{self.__class__.__name__}.{func.__name__} failed: {e}")
-            elif log_level == "INFO":
-                logger.info(f"{self.__class__.__name__}.{func.__name__} failed: {e}")
-
-        def _error_context(self: Any, e: Exception) -> dict[str, Any]:
-            return {
-                "plugin": self.__class__.__name__.lower().replace("plugin", ""),
-                "method": func.__name__,
-                "error": str(e),
-                "error_type": type(e).__name__,
-                "timestamp": datetime.now(tz=UTC).isoformat(),
-            }
-
-        if inspect.iscoroutinefunction(func):
-
-            @functools.wraps(func)
-            async def async_wrapper(self: Any, *args: Any, **kwargs: Any) -> Any:
-                try:
-                    return await func(self, *args, **kwargs)
-                except Exception as e:
-                    if _handle(self, e) is e:
-                        try:
-                            await self.emit("plugin.error", _error_context(self, e))
-                        except Exception:
-                            logger.warning(f"Failed to emit error event for {func.__name__}")
-                        _log(self, e)
-                    return return_on_error
-
-            return async_wrapper
-
-        @functools.wraps(func)
-        def sync_wrapper(self: Any, *args: Any, **kwargs: Any) -> Any:
-            try:
-                return func(self, *args, **kwargs)
-            except Exception as e:
-                if _handle(self, e) is e:
-                    # Duck-typed async emit can't be awaited from sync code.
-                    logger.warning(f"Failed to emit error event for {func.__name__}")
-                    _log(self, e)
-                return return_on_error
-
-        return sync_wrapper
 
     return decorator
 

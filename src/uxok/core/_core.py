@@ -442,6 +442,47 @@ class Core(CoreProtocol):
         if self.state is not CoreState.RUNNING:
             raise CoreError("Core must be started before loading plugins")
 
+        temp_instance, plugin_name = await self._materialize_plugin(code, origin)
+
+        # The existing-name lookup and the load/reload branch run as ONE locked
+        # operation, so concurrent load_plugin calls for the same name are
+        # serialized instead of racing the check.
+        async with self._lifecycle_lock:
+            await self._load_plugin_now(temp_instance, plugin_name)
+        return True
+
+    async def _materialize_plugin(
+        self, code: str, origin: str | None
+    ) -> tuple[PluginProtocol, str]:
+        """Compile, execute, and instantiate a plugin from a code string.
+
+        Registry-free and lock-free (RFC 0008 §4.2): compiles the code, execs it
+        in an isolated module, discovers the single ``Plugin`` subclass, and
+        instantiates it once to learn its name. No registry access, no lock —
+        this is the shared "turn a source string into a coreless candidate
+        instance" step behind both :meth:`load_plugin` (one candidate) and
+        :meth:`load_plugins` (many candidates materialized before planning).
+
+        Args:
+            code: Python source code containing exactly one Plugin subclass.
+            origin: Optional source file path. When given, the code is executed as
+                a package rooted at the file's folder, so the plugin may import
+                sibling helper modules relatively (``from . import _helper``) — a
+                capability can fan out across files in its own subfolder. The
+                synthetic package is registered in sys.modules only for the
+                duration of execution, preserving the no-permanent-pollution
+                invariant. When omitted, behaviour is unchanged (a bare isolated
+                module).
+
+        Returns:
+            ``(temp_instance, plugin_name)`` — a coreless candidate instance
+            (RFC 0001 §3.2.3) and its declared name. Plugin constructors should
+            be side-effect-free — acquire resources in ``on_start()``.
+
+        Raises:
+            PluginError: If the code fails to compile or exec, no Plugin
+                subclass is found, or more than one is found.
+        """
         import sys
         import types
         from pathlib import Path
@@ -473,9 +514,16 @@ class Core(CoreProtocol):
             pkg_registered = True
 
         try:
-            exec(compile(code, origin or "<orion_plugin>", "exec"), module.__dict__)  # noqa: S102
-        except Exception as e:
-            raise PluginError(f"Failed to compile plugin code: {e}") from e
+            try:
+                compiled = compile(code, origin or "<orion_plugin>", "exec")
+            except (SyntaxError, ValueError) as e:
+                raise PluginError(f"Failed to compile plugin code: {e}") from e
+            try:
+                exec(compiled, module.__dict__)  # noqa: S102
+            except Exception as e:
+                raise PluginError(
+                    f"Plugin code failed while executing at module top level: {e}"
+                ) from e
         finally:
             # Drop the synthetic package and any siblings it imported, keeping the
             # no-permanent-sys.modules-pollution invariant.
@@ -511,12 +559,7 @@ class Core(CoreProtocol):
         temp_instance = cls()
         plugin_name = temp_instance.metadata.name
 
-        # The existing-name lookup and the load/reload branch run as ONE locked
-        # operation, so concurrent load_plugin calls for the same name are
-        # serialized instead of racing the check.
-        async with self._lifecycle_lock:
-            await self._load_plugin_now(temp_instance, plugin_name)
-        return True
+        return temp_instance, plugin_name
 
     async def _load_plugin_now(self, temp_instance: PluginProtocol, plugin_name: str) -> None:
         """Atomic load-or-reload branch; runs within a tick boundary."""

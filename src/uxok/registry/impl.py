@@ -9,6 +9,7 @@ from uxok.core._shared_utils import (
     format_plugin_error,
     log_op,
 )
+from uxok.utils import topo_sort
 
 if TYPE_CHECKING:
     from collections.abc import Set
@@ -362,37 +363,20 @@ class _Registry:
         if plugin_ids is None:
             plugin_ids = set(self._plugins.keys())
 
-        # Simple topological sort
-        in_degree = dict.fromkeys(plugin_ids, 0)
-        graph: dict[PluginId, set[PluginId]] = {pid: set() for pid in plugin_ids}
+        ordered, unresolved = topo_sort(plugin_ids, self._dependencies)
 
-        # Build graph
-        for pid in plugin_ids:
-            deps = self._dependencies.get(pid, set()) & plugin_ids
-            for dep in deps:
-                graph[dep].add(pid)
-                in_degree[pid] += 1
-
-        # Topological sort
-        result = []
-        queue = [pid for pid, degree in in_degree.items() if degree == 0]
-
-        while queue:
-            current = queue.pop(0)
-            result.append(current)
-
-            for dependent in graph[current]:
-                in_degree[dependent] -= 1
-                if in_degree[dependent] == 0:
-                    queue.append(dependent)
-
-        # Check for cycles
-        if len(result) != len(plugin_ids):
+        if unresolved:
             from uxok.errors import CoreError
 
-            raise CoreError("Circular dependency detected in plugin load order")
+            on_cycle = sorted(
+                p.metadata.name if (p := self._plugins.get(pid)) else str(pid) for pid in unresolved
+            )
+            raise CoreError(
+                "Circular dependency detected in plugin load order; "
+                f"plugins involved: {', '.join(on_cycle)}"
+            )
 
-        return result
+        return ordered
 
     def _check_circular_dependencies(
         self, plugin_id: PluginId, dependencies: Set[PluginId]

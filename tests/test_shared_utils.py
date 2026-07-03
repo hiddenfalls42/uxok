@@ -17,6 +17,7 @@ from uxok.utils import (
     log_context,
     safe_str,
     sanitize_identifier,
+    topo_sort,
     validate_enum_value,
     validate_identifier,
     validate_positive_number,
@@ -247,3 +248,51 @@ async def test_resolve_plugin_by_name():
     plugin, pid = await resolve_plugin("beta", FakeRegistry())
     assert plugin is not None
     assert plugin.metadata.name == "beta"
+
+
+def test_topo_sort_empty_nodes():
+    assert topo_sort([], {}) == ([], set())
+
+
+def test_topo_sort_linear_chain():
+    deps = {"a": {"b"}, "b": {"c"}, "c": set()}
+    ordered, unresolved = topo_sort(["a", "b", "c"], deps)
+    assert unresolved == set()
+    assert ordered.index("c") < ordered.index("b") < ordered.index("a")
+
+
+def test_topo_sort_diamond_graph_is_valid_order():
+    deps = {
+        "storage": set(),
+        "index": {"storage"},
+        "search": {"storage", "index"},
+    }
+    nodes = ["storage", "index", "search"]
+    ordered, unresolved = topo_sort(nodes, deps)
+    assert unresolved == set()
+    assert set(ordered) == set(nodes)
+    for node, node_deps in deps.items():
+        for dep in node_deps:
+            assert ordered.index(dep) < ordered.index(node)
+
+
+def test_topo_sort_cycle_reports_unresolved_and_excludes_them():
+    deps = {"a": {"b"}, "b": {"a"}, "c": set()}
+    ordered, unresolved = topo_sort(["a", "b", "c"], deps)
+    assert unresolved == {"a", "b"}
+    assert ordered == ["c"]
+
+
+def test_topo_sort_ignores_deps_outside_node_set():
+    deps = {"a": {"missing"}}
+    ordered, unresolved = topo_sort(["a"], deps)
+    assert unresolved == set()
+    assert ordered == ["a"]
+
+
+def test_topo_sort_deterministic():
+    deps = {"a": {"b", "c"}, "b": set(), "c": set(), "d": {"a"}}
+    nodes = {"a", "b", "c", "d"}
+    first, _ = topo_sort(nodes, deps)
+    second, _ = topo_sort(nodes, deps)
+    assert first == second

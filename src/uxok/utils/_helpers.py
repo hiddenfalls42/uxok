@@ -6,7 +6,8 @@ import asyncio
 import logging
 import math
 import re
-from collections.abc import AsyncIterator, Coroutine, Iterable
+from collections.abc import AsyncIterator, Coroutine, Hashable, Iterable, Mapping
+from collections.abc import Set as AbstractSet
 from contextlib import asynccontextmanager, suppress
 from typing import TYPE_CHECKING, Any
 
@@ -101,6 +102,50 @@ def safe_str(value: Any) -> str:
 def log_context(**kwargs: Any) -> dict[str, Any]:
     """Create a shallow copy of provided log context fields."""
     return dict(kwargs)
+
+
+def topo_sort[T: Hashable](
+    nodes: Iterable[T],
+    dependencies: Mapping[T, AbstractSet[T]],
+) -> tuple[list[T], set[T]]:
+    """Kahn topological sort over an explicit node set.
+
+    Args:
+        nodes: The nodes to order.
+        dependencies: Maps a node to the nodes it depends on. Dependencies that
+            fall outside `nodes` are ignored, so callers may pass a mapping
+            with a wider domain than the node set being sorted.
+
+    Returns:
+        A `(ordered, unresolved)` tuple. `ordered` is a valid topological order
+        of `nodes` (dependencies before dependents). `unresolved` is the set of
+        nodes that could not be placed because they participate in, or depend
+        on, a cycle; it is nonempty exactly when `nodes` contains a cycle. This
+        function never raises on a cycle — the caller decides how to report it.
+    """
+    node_set = set(nodes)
+    in_degree = dict.fromkeys(node_set, 0)
+    graph: dict[T, set[T]] = {node: set() for node in node_set}
+
+    for node in node_set:
+        deps = dependencies.get(node, set()) & node_set
+        for dep in deps:
+            graph[dep].add(node)
+            in_degree[node] += 1
+
+    ordered: list[T] = []
+    queue = [node for node, degree in in_degree.items() if degree == 0]
+
+    while queue:
+        current = queue.pop(0)
+        ordered.append(current)
+        for dependent in graph[current]:
+            in_degree[dependent] -= 1
+            if in_degree[dependent] == 0:
+                queue.append(dependent)
+
+    unresolved = node_set - set(ordered)
+    return ordered, unresolved
 
 
 class AsyncTaskManager:

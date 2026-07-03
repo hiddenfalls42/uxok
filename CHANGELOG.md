@@ -109,6 +109,12 @@ commit as its CHANGELOG entry.
   event-system, hook-system, and plugin-architecture explanations.
 
 ### Removed
+- **Breaking (pre-1.0):** removed `@handle_errors` decorator and all supporting
+  helpers (`_error_context`, `_handle`, `_log`) from `uxok.plugin`. The decorator
+  was zero-usage in the kernel and example code, and encouraged hiding exceptions
+  rather than handling them intentionally. Replacement: use `try/except` directly in
+  your method body and call `self._emit_plugin_error(source, error, **extra)` for the
+  standard `core.plugin_error` signal. See §15 of `docs/manifests/API.md`.
 - **Breaking (pre-1.0):** removed the `blocked_plugins` config field and the
   `Registry.block()`/`unblock()`/`is_blocked()` methods. There is no longer a kernel-level
   plugin blocklist. Hosts must enforce admission policy before calling `register_plugin()`.

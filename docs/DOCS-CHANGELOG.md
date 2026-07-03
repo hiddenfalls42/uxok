@@ -2,6 +2,9 @@
 
 <!-- One line per note added, updated, or removed. Format: YYYY-MM-DD | action | path — description -->
 
+2026-07-02 | removed | docs/how-to/how-to-use-error-handler-decorator.md — deleted; handle_errors decorator removed from the kernel
+2026-07-02 | updated | docs/how-to/index.md — removed Error handling section and its single bullet
+2026-07-02 | updated | docs/manifests/API.md — removed §4.3 handle_errors, plugin.error legacy section, and related references; added §15 Removed row
 2026-06-30 | updated | docs/manifests/API.md — register_plugin/load_plugin raises: added CoreError if not RUNNING; added RUNNING-requirement note
 2026-06-30 | updated | docs/how-to/how-to-manage-core-lifecycle.md — removed the "Register a plugin before starting" section (auto-start removed); renumbered subsequent steps
 2026-06-30 | updated | docs/how-to/how-to-register-and-manage-plugins.md — removed auto-start claim; register example now calls core.start() before register_plugin

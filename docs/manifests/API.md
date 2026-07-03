@@ -85,9 +85,9 @@ exceptions the framework raises *into* caller code (`CoreError`, `PluginError`,
 *re-exported* here; their definition homes are `uxok.plugin` and
 `uxok.errors`, both of which remain importable.
 
-Everything else stays subpackage-only by design: `handle_errors` (advanced, in
-`uxok.plugin`), `Event`/`CoreConfig`/protocol types (in `uxok.protocols`),
-and the `EventBus`/`HookSystem` surfaces (reached via `core.events`/`core.hooks`).
+Everything else stays subpackage-only by design: `Event`/`CoreConfig`/protocol
+types (in `uxok.protocols`), and the `EventBus`/`HookSystem` surfaces (reached
+via `core.events`/`core.hooks`).
 
 **The line is drawn by *use*, not by tidiness.** A name is top-level iff author or host
 code must *write it* to do its job — one of:
@@ -396,11 +396,10 @@ Notes:
 
 ## 4. Decorators
 
-Defined in `uxok.plugin` (`hook`, `event`, `handle_errors`). `hook` and `event`
-are re-exported at top-level `uxok`, which is the **canonical author path**
-(`from uxok import event, hook`); the `uxok.plugin` path is the definition
-home and remains valid. These are the same objects reached two ways, not two
-implementations. `handle_errors` is advanced and stays `uxok.plugin`-only.
+Defined in `uxok.plugin` (`hook`, `event`). Both are re-exported at top-level
+`uxok`, which is the **canonical author path** (`from uxok import event, hook`);
+the `uxok.plugin` path is the definition home and remains valid. These are the
+same objects reached two ways, not two implementations.
 
 ### 4.1 `hook`
 
@@ -429,34 +428,6 @@ There is no `typed` parameter.
 | Parameter | Type | Default |
 |---|---|---|
 | `event_pattern` | `str` | (required) |
-
-### 4.3 `handle_errors`
-
-```python
-def handle_errors(
-    emit_event: bool = True,
-    return_on_error: Any = None,
-    log_level: str = "ERROR",
-) -> Callable[[Callable], Callable]
-```
-
-Wraps a method with automatic error catching, logging, and optional event emission.
-
-| Parameter | Type | Default | Notes |
-|---|---|---|---|
-| `emit_event` | `bool` | `True` | Whether to emit an error event on exception |
-| `return_on_error` | `Any` | `None` | Value returned when an exception is caught |
-| `log_level` | `str` | `"ERROR"` | Accepts `"ERROR"`, `"WARNING"`, `"INFO"`; other values silence logging |
-
-**Emitted event name — critical distinction:**
-
-- When wrapping a real `Plugin` instance (object has `_emit_plugin_error`): emits
-  `"core.plugin_error"` with `source="handled_method"`.
-- When wrapping a duck-typed object (has `emit` but no `_emit_plugin_error`): emits
-  `"plugin.error"` as a legacy fallback. Sync wrappers cannot await the emit and
-  only log.
-
-See [§12](#12-framework-event-contracts) for the full `core.plugin_error` payload specification.
 
 ---
 
@@ -939,7 +910,6 @@ from uxok.plugin import (
     ConfigField,
     Plugin,
     event,
-    handle_errors,
     hook,
 )
 ```
@@ -995,8 +965,7 @@ marked as "stable" are guaranteed across all emit sites for that event name.
 
 ### `core.plugin_error`
 
-Emitted when a plugin's event handler, background task, lifecycle step, or
-`@handle_errors`-wrapped method fails.
+Emitted when a plugin's event handler, background task, or lifecycle step fails.
 
 Stable payload keys (present at every emit site):
 
@@ -1004,7 +973,7 @@ Stable payload keys (present at every emit site):
 |---|---|---|
 | `plugin_id` | `str` | Plugin UUID |
 | `plugin_name` | `str` | Plugin name (present at most sites; absent at the raw event-handler path which omits it) |
-| `source` | `str` | Origin of the failure: `"lifecycle"`, `"event_handler"`, `"handled_method"`, or `"background_task"` |
+| `source` | `str` | Origin of the failure: `"lifecycle"`, `"event_handler"`, or `"background_task"` |
 | `error` | `str` | String representation of the exception |
 | `error_type` | `str` | Exception class name |
 
@@ -1014,7 +983,6 @@ Source-dependent extra keys:
 |---|---|
 | `"lifecycle"` | `phase` (e.g. `"register"`, `"start"`, `"on_stop"`) |
 | `"event_handler"` | `event_name` |
-| `"handled_method"` | `method` |
 | `"background_task"` | `task_name` |
 
 Failures inside a `core.plugin_error` handler are logged but not re-reported (no error
@@ -1096,13 +1064,6 @@ executed via `core.hooks.execute("plugin.registered", plugin)` and
 `core.hooks.execute("plugin.unregistered", real_id)`. They do not appear in the event
 bus and are not subscribable with `@event`.
 
-### `plugin.error` — legacy duck-typed fallback
-
-`"plugin.error"` is NOT a kernel framework event for real `Plugin` instances. It is
-emitted only by `@handle_errors` when wrapping a non-`Plugin` object that has an `emit`
-method but lacks `_emit_plugin_error`. Payload: `plugin`, `method`, `error`,
-`error_type`, `timestamp`. This is distinct from `core.plugin_error`.
-
 ---
 
 ## 13. State machine
@@ -1177,6 +1138,7 @@ in step 6 is signalled but does not roll back.
 | `CoreConfig.tick_queue_overflow` | **Removed** | Serial gate queue is gone; no dispatch queue exists |
 | `CoreConfig.blocked_plugins` | **Removed** | No kernel-level plugin blocklist; hosts enforce admission policy before calling `register_plugin()` |
 | `Registry.block` / `unblock` / `is_blocked` | **Removed** | No kernel-level plugin blocklist; hosts enforce admission policy before calling `register_plugin()` |
+| `@handle_errors(...)` / `from uxok.plugin import handle_errors` | **Removed** | Use `try/except` + `self._emit_plugin_error(source, error, **extra)` in `Plugin` subclasses; supervision policy belongs in plugin code |
 
 Zero backward compatibility on all removed names. `on` is completely gone; code
 using `@on(...)` or `from uxok import on` raises `ImportError`. `CoreConfig`

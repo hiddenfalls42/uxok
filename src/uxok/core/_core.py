@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
 from uxok.core._capability_system import CapabilityPolicy, CapabilitySystem
+from uxok.core._hot_reload import reload_plugin_now
 from uxok.core._loader import materialize_plugin
 from uxok.core._shared_utils import drain_plugin_resources
 from uxok.core._state_manager import StateManager
@@ -594,170 +595,13 @@ class Core(CoreProtocol):
     async def _reload_plugin_now(
         self, old_plugin: PluginProtocol, new_plugin: PluginProtocol
     ) -> None:
-        """Reload logic, runs under the lifecycle lock and the operation guard.
+        """Thin entry point — delegates to _hot_reload.reload_plugin_now.
 
-        Mirrors `_register_plugin_now`: a hot-reload is a lifecycle operation and
-        must be serialized through the lifecycle lock and protected by the same
-        per-plugin operation guard as registration/unregistration.
+        Kept here so callers holding a Core reference (including tests that
+        drive reloads directly) continue to work unchanged after the machinery
+        moved to _hot_reload.py.
         """
-        if self.state is not CoreState.RUNNING:
-            raise CoreError("Core must be started before reloading plugins")
-
-        plugin_id = old_plugin.metadata.id
-
-        if not await self._active_operations.add(plugin_id):
-            raise PluginError(f"Plugin {plugin_id} already has an active operation")
-        try:
-            await self._swap_plugin(old_plugin, new_plugin)
-        finally:
-            await self._active_operations.remove(plugin_id)
-
-    async def _swap_plugin(self, old_plugin: PluginProtocol, new_plugin: PluginProtocol) -> None:
-        """Atomically swap a plugin instance with zero downtime.
-
-        This is a kernel primitive for hot reload (internal use only).
-        The swap:
-        1. Starts the new plugin (registers hooks and events)
-        2. Atomically swaps instance in registry (preserves ID, deps, dependents)
-        3. Reconciles capability providers (replace/add/remove, de-duplicated)
-        4. Drains old plugin's hooks, events, and background tasks
-
-        During the brief window between steps 1 and 4, both instances exist,
-        but registry lookups return only the new instance. Capabilities remain
-        available throughout with zero interruption.
-
-        Args:
-            old_plugin: Existing registered plugin instance to replace.
-            new_plugin: New plugin instance. Must have the same name as old_plugin.
-
-        Raises:
-            PluginError: If old_plugin is not found, or names do not match.
-        """
-        old_id = old_plugin.metadata.id
-
-        # 1. Fail fast if the new version's requirements aren't satisfiable,
-        #    and compute its fresh dependency edges (declared + capability).
-        cap_deps = await self._capability_system.validate_requirements(new_plugin)
-        new_deps = set(new_plugin.metadata.dependencies) | (cap_deps or set())
-        new_deps.discard(old_id)  # a plugin never depends on itself
-        old_deps = await self._registry.dependencies(old_id)
-
-        # 2. State handoff: capture from the old instance before any mutation.
-        #    A get_state() failure aborts the reload with nothing to roll back.
-        state = await old_plugin.get_state()
-
-        registry_swapped = False
-        try:
-            # 3. Attach the core, then start the new plugin (registers hooks and
-            #    events). Attach must precede start: on_start uses self.core.
-            self._attach_core_to(new_plugin)
-            await new_plugin.start()
-
-            # 4. Swap in registry (atomic - preserves ID and dependents,
-            #    replaces dependency edges with the new version's)
-            await self._registry.swap_instance(old_id, new_plugin, dependencies=new_deps)
-            registry_swapped = True
-
-            # 5. Reconcile capability providers (in-place replace, de-duplicated)
-            rebound = await self._capability_system.swap_provider(old_plugin, new_plugin)
-
-            # 5a. Announce rebinds. The capability mutation above already
-            #     completed synchronously, so this event-bus await is outside
-            #     the critical section (lock-free invariant). A publish failure
-            #     must never fail the reload.
-            for capability, old_provider_id, new_provider_id in rebound:
-                with suppress(Exception):
-                    await self._event_bus.publish(
-                        Event(
-                            "core.capability.rebound",
-                            {
-                                "capability": capability,
-                                "old_provider_id": old_provider_id,
-                                "new_provider_id": new_provider_id,
-                            },
-                        )
-                    )
-
-            # 6. Hand the captured state to the new instance
-            await new_plugin.restore_state(state)
-        except Exception:
-            # Roll back so the old version keeps running. Both instances share
-            # the plugin ID, so the half-started new instance is drained by
-            # INSTANCE identity — the old instance's registrations are never
-            # touched.
-            if registry_swapped:
-                with suppress(Exception):
-                    await self._registry.swap_instance(old_id, old_plugin, dependencies=old_deps)
-            with suppress(Exception):
-                await self._drain_instance(new_plugin)
-            raise
-
-        # 7. Call the old instance's on_stop so it can release external resources.
-        #    on_stop is NOT part of PluginProtocol (protocols are immutable), so
-        #    use a getattr guard. A raising on_stop must never fail the reload.
-        on_stop = getattr(old_plugin, "on_stop", None)
-        if on_stop is not None:
-            try:
-                await on_stop()
-            except Exception as e:
-                logger.warning(
-                    "Error in plugin on_stop during hot reload",
-                    extra={
-                        "plugin_id": str(old_plugin.metadata.id),
-                        "plugin_name": old_plugin.metadata.name,
-                        "error": str(e),
-                    },
-                )
-                with suppress(Exception):
-                    await self._event_bus.publish(
-                        build_plugin_error_event(
-                            str(old_plugin.metadata.id),
-                            old_plugin.metadata.name,
-                            "lifecycle",
-                            e,
-                            phase="on_stop",
-                        )
-                    )
-
-        # Mark the old instance shut down so a stray later stop() on a retained
-        # reference is a no-op: Plugin.stop() guards on _shutdown (not
-        # name-mangled), so setting it here prevents a double on_stop call if
-        # the caller holds a reference to the old instance after reload.
-        if hasattr(old_plugin, "_shutdown"):
-            old_plugin._shutdown = True  # type: ignore[union-attr]
-
-        # 8. Drain the old instance — by instance identity, for the same
-        #    shared-ID reason: an ID-wide drain would also destroy the new
-        #    instance's just-registered hooks and subscriptions.
-        await self._drain_instance(old_plugin)
-
-        logger.debug(
-            "Swapped plugin instance with zero downtime",
-            extra=log_op(
-                "swap_plugin",
-                plugin_name=old_plugin.metadata.name,
-                plugin_id=str(old_id),
-            ),
-        )
-
-    async def _drain_instance(self, plugin: PluginProtocol) -> None:
-        """Drain one plugin INSTANCE's resources, leaving same-ID siblings intact.
-
-        Hot-reload companion to drain_plugin_resources: during a swap the old
-        and new instances share a plugin ID, so cleanup must be scoped by
-        instance identity. Hooks/subscriptions registered with closures that
-        carry no instance ownership are left for the ID-wide drain at
-        unregistration.
-        """
-        with suppress(Exception):
-            await self._event_bus.unsubscribe_owner(plugin)
-        with suppress(Exception):
-            await self._hook_system.unregister_owner_hooks(plugin)
-        with suppress(Exception):
-            self._tick_scheduler.unschedule_owner(plugin)
-        if hasattr(plugin, "_task_manager"):
-            with suppress(Exception):
-                await plugin._task_manager.cancel_all()
+        await reload_plugin_now(self, old_plugin, new_plugin)
 
     async def list(self) -> PluginCollection:
         """List all plugins as PluginView objects.

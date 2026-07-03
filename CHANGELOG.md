@@ -92,6 +92,14 @@ commit as its CHANGELOG entry.
   scripts are pruned (tests are intentionally excluded from the sdist for leanness).
 
 ### Changed
+- Internal: extracted plugin materialization (isolated-module exec, `sys.modules`
+  synthesis, Plugin-subclass discovery) from `Core.load_plugin` into
+  `src/uxok/core/_loader.py` (`materialize_plugin`). Extracted hot-reload swap
+  machinery (`_reload_plugin_now`, `_swap_plugin`, `_drain_instance`) from
+  `Core` into `src/uxok/core/_hot_reload.py` (`reload_plugin_now`, `swap_plugin`,
+  `drain_instance`). `Core` keeps thin delegating methods; public API, protocols,
+  async invariants, and lock-free critical sections are unchanged. `_core.py`
+  reduced from ~946 to ~732 lines. (audit finding M7)
 - **Breaking (pre-1.0):** `Plugin.hook` is now a class-level method instead of an
   instance-attribute closure assigned in `__init__`. The call signature is identical;
   subclasses that override `hook` or depend on `Plugin.__init__` assigning `self.hook`

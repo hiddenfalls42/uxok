@@ -84,7 +84,6 @@ plans/
 # (Re-add deliberately if you ever want to showcase the AI setup.)
 .claude/
 docs/agent_data/
-scripts/dev_utilities/
 
 # Manifests: only the programmatically-tested API.md is public for now.
 docs/manifests/FRAMEWORK_PHILOSOPHY.md

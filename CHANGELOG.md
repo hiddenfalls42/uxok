@@ -84,6 +84,12 @@ commit as its CHANGELOG entry.
   `"open"` short-circuits before the gate), and zero runtime cost (a synchronous set-union
   membership test, no new awaits). `CapabilityAccessError`'s message now reports the runtime
   grant and points at `resolves`.
+- Release pipeline: tag-triggered `.github/workflows/release.yml` that builds the sdist and
+  wheel, runs `twine check`, asserts the pushed `v*` tag matches `project.version`, and
+  publishes to PyPI via Trusted Publishing (OIDC, no token secrets) in a `pypi` environment.
+- `MANIFEST.in` for deliberate sdist curation — ships the kernel source plus
+  `LICENSE`/`README.md`/`CHANGELOG.md`/`pyproject.toml`; tests, `.github`, docs, examples, and
+  scripts are pruned (tests are intentionally excluded from the sdist for leanness).
 
 ### Changed
 - **Breaking (pre-1.0):** the kernel no longer auto-starts on first plugin registration. `register_plugin`, `load_plugin`, and hot-reload now require the core to be `RUNNING` and raise `CoreError` otherwise. Call `core.start()` (or use `async with Core() as core:`) before registering plugins. The context-manager path and already-started cores are unaffected — hosts that already start explicitly see no behavioral change.
@@ -107,6 +113,18 @@ commit as its CHANGELOG entry.
   the over-strong "complete who-can-reach-what" claim in RFC 0001 §2.2 and RFC 0002 §7, adds
   the caveat to `API.md` §3.2, and documents the data-not-handles payload convention in the
   event-system, hook-system, and plugin-architecture explanations.
+- `[project.urls]` now advertises `Homepage` and `Documentation`
+  (`https://hiddenfalls42.github.io/uxok/`) and `Issues`, so the PyPI sidebar links out to
+  the docs site and issue tracker.
+- CI `security` job: replaced the deprecated `safety check` (now requires an account/auth)
+  with `pip-audit`; the `safety` dev dependency is swapped for `pip-audit`.
+
+### Fixed
+- `scripts/dev_utilities/bump_version.py`: matches the real `## [Unreleased]` heading (was
+  `## Unreleased`, which never matched), emits the established `## [X.Y.Z] — YYYY-MM-DD`
+  heading style, resolves the repo root correctly, and is now atomic — every file edit is
+  planned before anything is written, so a failure can no longer leave `pyproject.toml`
+  bumped with the changelog un-rolled.
 
 ### Removed
 - **Breaking (pre-1.0):** removed the `blocked_plugins` config field and the

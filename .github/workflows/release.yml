@@ -1,0 +1,52 @@
+# Release pipeline — build, verify, and publish uxok to PyPI on version tags.
+#
+# Trusted Publishing (OIDC): this workflow uses NO API tokens or secrets. Before
+# the first `v*` tag is pushed, the PyPI Trusted Publisher for `hiddenfalls42/uxok`
+# MUST be registered (PyPI -> the uxok project -> Publishing -> add a GitHub
+# publisher with owner `hiddenfalls42`, repo `uxok`, workflow `release.yml`,
+# environment `pypi`). Until that registration exists the publish step will fail
+# OIDC authentication.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+# Least privilege by default; the publish job widens id-token for OIDC.
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: Build and publish to PyPI
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      contents: read
+      id-token: write # OIDC token for PyPI Trusted Publishing (no secrets)
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+      - name: Install build tooling
+        run: python -m pip install --upgrade build twine
+      - name: Build sdist and wheel
+        run: python -m build
+      - name: Twine check
+        run: twine check dist/*
+      # Tag/version consistency gate: the pushed tag (minus leading `v`) MUST
+      # equal project.version in pyproject.toml, or the release aborts loudly.
+      - name: Assert tag matches project.version
+        env:
+          GIT_TAG: ${{ github.ref_name }}
+        run: |
+          tag_version="${GIT_TAG#v}"
+          proj_version="$(python -c 'import tomllib, pathlib; print(tomllib.loads(pathlib.Path("pyproject.toml").read_text())["project"]["version"])')"
+          echo "tag=${tag_version} pyproject=${proj_version}"
+          if [ "${tag_version}" != "${proj_version}" ]; then
+            echo "::error::pushed tag v${tag_version} does not match project.version ${proj_version}"
+            exit 1
+          fi
+      - name: Publish to PyPI (Trusted Publishing)
+        uses: pypa/gh-action-pypi-publish@76f52bc884231f62b9a034ebfe128415bbaabdfc # v1.12.4

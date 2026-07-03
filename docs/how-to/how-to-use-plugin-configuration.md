@@ -1,6 +1,6 @@
 # Use plugin configuration values
 
-`self.config()` reads a configuration value for your plugin. It resolves through four sources in a fixed order, so you can always rely on a sensible fallback.
+`self.config()` reads a configuration value for your plugin. It resolves through three sources in a fixed order, so you can always rely on a sensible fallback.
 
 ## 1. Read a value with a direct fallback
 
@@ -63,26 +63,7 @@ class CachePlugin(Plugin):
         print(f"Cache ready at {url}, namespace={namespace}, ttl={ttl}")
 ```
 
-Schema defaults sit between the plugin-scoped dictionary and the `CoreConfig` fallback. Supplying a value in `plugin_configs` overrides the schema default; not supplying one lets the schema default take effect.
-
-## 4. Access `CoreConfig` attributes as a last resort
-
-When a key is not found in `plugin_configs` and not declared in the schema, `self.config()` looks for an attribute of the same name on `CoreConfig`. This lets plugins read framework-wide settings without importing `CoreConfig` directly:
-
-```python
-from uxok import Plugin
-
-class MonitorPlugin(Plugin):
-    def __init__(self):
-        super().__init__(name="monitor")
-
-    async def on_start(self):
-        # tick_rate is a CoreConfig attribute, not a plugin-scoped value
-        rate = self.config("tick_rate", 1000)
-        print(f"Monitoring at {rate} ticks/s")
-```
-
-Use this sparingly. Plugin behaviour that depends on framework-wide settings is harder to test in isolation.
+Schema defaults sit between the plugin-scoped dictionary and the default argument. Supplying a value in `plugin_configs` overrides the schema default; not supplying one lets the schema default take effect.
 
 ## Lookup order at a glance
 
@@ -90,8 +71,7 @@ Use this sparingly. Plugin behaviour that depends on framework-wide settings is 
 
 1. Plugin-scoped value from `plugin_configs[plugin_name][key]`
 2. Schema default from `config_schema[key].default` (when a schema is declared)
-3. `CoreConfig` attribute `getattr(core.config, key, ...)`
-4. The `default` argument you passed to `self.config()`
+3. The `default` argument you passed to `self.config()`
 
 Each source is a fallback for the one above it, so you can override any value without touching the plugin code.
 

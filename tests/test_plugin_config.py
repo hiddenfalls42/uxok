@@ -34,13 +34,6 @@ class TestPluginConfig:
                 id="reads-scoped-values",
             ),
             pytest.param(
-                {"max_plugins": 100, "plugin_configs": {"test": {}}},
-                None,
-                None,
-                {"max_plugins": 100},
-                id="falls-back-to-core-config",
-            ),
-            pytest.param(
                 {"plugin_configs": {"test": {}}},
                 {"timeout": ConfigField(int, default=30)},
                 None,
@@ -71,16 +64,8 @@ class TestPluginConfig:
                 id="required-field-present-succeeds",
             ),
             pytest.param(
-                {"max_plugins": 100},
-                None,
-                None,
-                {"max_plugins": 100},
-                id="no-schema-unchanged-behaviour",
-            ),
-            pytest.param(
-                # Precedence: scoped value > schema default > CoreConfig fallback.
+                # Precedence: scoped value > schema default > default argument.
                 {
-                    "max_plugins": 100,
                     "plugin_configs": {
                         "test": {
                             "db_url": "postgres://localhost",
@@ -98,7 +83,6 @@ class TestPluginConfig:
                     "db_url": "postgres://localhost",
                     "timeout": 60,
                     "retries": 3,
-                    "max_plugins": 100,
                 },
                 id="lookup-order-precedence",
             ),

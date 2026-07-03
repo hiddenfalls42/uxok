@@ -515,8 +515,7 @@ class Plugin(PluginProtocol):
         Lookup order:
           1. Plugin-scoped values (from core._plugin_configs[plugin_name])
           2. Schema default (if declared)
-          3. CoreConfig attributes (existing behaviour, unchanged)
-          4. Provided default argument
+          3. Provided default argument
 
         Args:
             key: Configuration attribute name
@@ -536,8 +535,7 @@ class Plugin(PluginProtocol):
             if field.default is not REQUIRED:
                 return field.default
 
-        # 3. CoreConfig fallback (existing behaviour)
-        return getattr(self.__core_real.config, key, default)
+        return default
 
     @overload
     async def get_capability(self, capability: type[_T], *, tag: str | None = None) -> _T: ...

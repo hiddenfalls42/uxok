@@ -2,6 +2,8 @@
 
 <!-- One line per note added, updated, or removed. Format: YYYY-MM-DD | action | path — description -->
 
+2026-07-02 | updated | docs/how-to/how-to-use-plugin-configuration.md — removed §4 CoreConfig fallback section; updated lookup table to three sources
+2026-07-02 | updated | docs/manifests/API.md — config() three-source note + §15 Removed row for CoreConfig fallthrough removal
 2026-07-02 | removed | docs/how-to/how-to-use-error-handler-decorator.md — deleted; handle_errors decorator removed from the kernel
 2026-07-02 | updated | docs/how-to/index.md — removed Error handling section and its single bullet
 2026-07-02 | updated | docs/manifests/API.md — removed §4.3 handle_errors, plugin.error legacy section, and related references; added §15 Removed row

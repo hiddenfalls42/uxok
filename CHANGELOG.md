@@ -86,6 +86,11 @@ commit as its CHANGELOG entry.
   grant and points at `resolves`.
 
 ### Changed
+- **Breaking (pre-1.0):** `Plugin.config()` no longer falls through to `CoreConfig` as a
+  last resort. The lookup order is now: (1) plugin-scoped `plugin_configs` value; (2) schema
+  default; (3) the `default` argument. Plugins that previously read `CoreConfig` fields by
+  name (e.g. `self.config("tick_rate")`) now receive the `default` argument instead. Use
+  `self.core.config.<field>` directly for kernel-wide settings.
 - **Breaking (pre-1.0):** the kernel no longer auto-starts on first plugin registration. `register_plugin`, `load_plugin`, and hot-reload now require the core to be `RUNNING` and raise `CoreError` otherwise. Call `core.start()` (or use `async with Core() as core:`) before registering plugins. The context-manager path and already-started cores are unaffected — hosts that already start explicitly see no behavioral change.
 - **Breaking (pre-1.0):** plugin construction is now coreless (RFC 0001 §3.2.3). The core
   is no longer a constructor argument; the kernel attaches it at register/reload time, so

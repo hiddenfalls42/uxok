@@ -384,6 +384,11 @@ Notes:
   under `"declared"`/`"sealed"` reaches the admission probe as `self.core.check_plugin(...)`,
   not only through the `_Plugin__core_real` reflection escape. It is *not* on `LifecycleFacet`:
   a probe-only consumer (a gate) must not take graph-mutation authority to ask a question.
+- `config(key, default=None)` resolves through **three sources** in order: (1) plugin-scoped
+  value from `plugin_configs[plugin_name][key]`; (2) schema default from
+  `config_schema[key].default` when a schema is declared; (3) the `default` argument. It does
+  **not** fall through to `CoreConfig` — use `core.config.<field>` directly if a plugin needs
+  a kernel-wide setting.
 
 ### 3.3 Properties
 
@@ -1139,6 +1144,7 @@ in step 6 is signalled but does not roll back.
 | `CoreConfig.blocked_plugins` | **Removed** | No kernel-level plugin blocklist; hosts enforce admission policy before calling `register_plugin()` |
 | `Registry.block` / `unblock` / `is_blocked` | **Removed** | No kernel-level plugin blocklist; hosts enforce admission policy before calling `register_plugin()` |
 | `@handle_errors(...)` / `from uxok.plugin import handle_errors` | **Removed** | Use `try/except` + `self._emit_plugin_error(source, error, **extra)` in `Plugin` subclasses; supervision policy belongs in plugin code |
+| `Plugin.config()` fallthrough to `CoreConfig` | **Removed** | Lookup stops at the `default` argument; reach `CoreConfig` explicitly via `self.core.config.<field>` if needed |
 
 Zero backward compatibility on all removed names. `on` is completely gone; code
 using `@on(...)` or `from uxok import on` raises `ImportError`. `CoreConfig`

@@ -14,7 +14,7 @@ from uxok.plugin._naming import detect_plugin_name, validate_plugin_name
 from uxok.plugin.config_field import REQUIRED
 from uxok.protocols import Core, Event, PluginMetadata, PluginProtocol
 from uxok.protocols._types import PluginId
-from uxok.utils import AsyncTaskManager, normalize_capability_set
+from uxok.utils import AsyncTaskManager, build_plugin_error_event, normalize_capability_set
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Coroutine
@@ -603,17 +603,17 @@ class Plugin(PluginProtocol):
         **extra: Any,
     ) -> None:
         """Fire-and-forget publication of a core.plugin_error event."""
-        payload = {
-            "plugin_id": str(self._metadata.id),
-            "plugin_name": self._metadata.name,
-            "source": source,
-            "error": str(error),
-            "error_type": type(error).__name__ if error is not None else "",
-            **extra,
-        }
         try:
             asyncio.get_running_loop().create_task(
-                self.__core_real.events.publish(Event("core.plugin_error", payload))
+                self.__core_real.events.publish(
+                    build_plugin_error_event(
+                        str(self._metadata.id),
+                        self._metadata.name,
+                        source,
+                        error,
+                        **extra,
+                    )
+                )
             )
         except Exception:
             logger.debug("Failed to publish core.plugin_error", exc_info=True)

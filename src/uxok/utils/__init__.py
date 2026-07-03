@@ -9,6 +9,7 @@ from ._capability_utils import (
     normalize_capability_set,
 )
 from ._formatting import (
+    build_plugin_error_event,
     format_capability_error,
     format_plugin_error,
     log_op,
@@ -28,6 +29,7 @@ from .async_primitives import _AsyncSafeSet
 __all__ = [
     "AsyncTaskManager",
     "_AsyncSafeSet",
+    "build_plugin_error_event",
     "camel_to_snake",
     "derive_capability_name",
     "format_capability_error",

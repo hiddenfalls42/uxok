@@ -30,7 +30,7 @@ from uxok.protocols.registry import Registry
 from uxok.registry._resolve import resolve_plugin
 from uxok.timing._clock import TickClock
 from uxok.timing._scheduler import TickScheduler
-from uxok.utils import format_plugin_error, log_op
+from uxok.utils import build_plugin_error_event, format_plugin_error, log_op
 
 if TYPE_CHECKING:
     from uxok.registry._plugin_view import PluginCollection
@@ -359,16 +359,12 @@ class Core(CoreProtocol):
         except Exception as e:
             with suppress(Exception):
                 await self._event_bus.publish(
-                    Event(
-                        "core.plugin_error",
-                        {
-                            "plugin_id": str(plugin_id),
-                            "plugin_name": plugin.metadata.name,
-                            "source": "lifecycle",
-                            "phase": "register",
-                            "error": str(e),
-                            "error_type": type(e).__name__,
-                        },
+                    build_plugin_error_event(
+                        str(plugin_id),
+                        plugin.metadata.name,
+                        "lifecycle",
+                        e,
+                        phase="register",
                     )
                 )
             with suppress(Exception):
@@ -773,16 +769,12 @@ class Core(CoreProtocol):
                 )
                 with suppress(Exception):
                     await self._event_bus.publish(
-                        Event(
-                            "core.plugin_error",
-                            {
-                                "plugin_id": str(old_plugin.metadata.id),
-                                "plugin_name": old_plugin.metadata.name,
-                                "source": "lifecycle",
-                                "error": str(e),
-                                "error_type": type(e).__name__,
-                                "phase": "on_stop",
-                            },
+                        build_plugin_error_event(
+                            str(old_plugin.metadata.id),
+                            old_plugin.metadata.name,
+                            "lifecycle",
+                            e,
+                            phase="on_stop",
                         )
                     )
 

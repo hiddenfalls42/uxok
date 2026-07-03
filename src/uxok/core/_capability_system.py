@@ -7,7 +7,8 @@ from dataclasses import dataclass
 from functools import cache
 from typing import TYPE_CHECKING, Any
 
-from uxok.errors import CapabilityAccessError, MissingCapabilityError, PluginError
+from uxok._config_validation import CAPABILITY_COLLISION_POLICIES
+from uxok.errors import CapabilityAccessError, CapabilityError, MissingCapabilityError, PluginError
 from uxok.registry._plugin_view import CapabilityInfo
 from uxok.utils import derive_capability_name, format_capability_error, get_protocol_methods, log_op
 from uxok.utils._capability_utils import signature_incompatibility
@@ -74,10 +75,6 @@ class CapabilitySystem:
         # await inside a mutation, reintroduce a lock around that section.
         self._policy = policy
 
-    _VALID_COLLISION_POLICIES = frozenset(
-        {"error_on_conflict", "last_wins_with_warning", "first_wins"}
-    )
-
     def _select_provider(self, providers: list[Any]) -> Any:
         """Select a provider from a list using the configured selection policy."""
         if self._policy.capability_selection == "last_registered":
@@ -87,7 +84,7 @@ class CapabilitySystem:
     def _resolve_collision_policy(self) -> str:
         """Return the active collision policy, defaulting unknown values safely."""
         policy = self._policy.capability_collision
-        if policy not in self._VALID_COLLISION_POLICIES:
+        if policy not in CAPABILITY_COLLISION_POLICIES:
             logger.warning(
                 "Unknown capability_collision policy %r; defaulting to error_on_conflict",
                 policy,
@@ -183,7 +180,7 @@ class CapabilitySystem:
             policy = self._policy.capability_missing
             if policy == "return_none":
                 return None
-            raise KeyError(format_capability_error(capability, None))
+            raise CapabilityError(capability)
 
         providers = self._capabilities[capability]
 
@@ -191,9 +188,10 @@ class CapabilitySystem:
             filtered = [p for p in providers if tag in p.metadata.tags]
             if not filtered:
                 all_tags = sorted({t for p in providers for t in p.metadata.tags})
-                raise KeyError(
-                    f"No provider for capability '{capability}' has tag '{tag}'. "
-                    f"Provider tags: {all_tags}"
+                raise CapabilityError(
+                    capability,
+                    message=f"No provider for capability '{capability}' has tag '{tag}'. "
+                    f"Provider tags: {all_tags}",
                 )
             providers = filtered
 

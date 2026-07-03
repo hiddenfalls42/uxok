@@ -877,7 +877,7 @@ class Core(CoreProtocol):
             return LifecycleFacet(self)
         try:
             return await self._capability_system.get_capability(capability, tag=tag)
-        except KeyError:
+        except CapabilityError:
             from uxok.utils import derive_capability_name
 
             cap_name = (

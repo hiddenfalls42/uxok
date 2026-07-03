@@ -11,8 +11,8 @@ class TestHookDecorator:
         async def validate(self, data):
             return data
 
-        assert hasattr(validate, "_orion_hooks")
-        info = validate._orion_hooks[0]
+        assert hasattr(validate, "_uxok_hooks")
+        info = validate._uxok_hooks[0]
         assert info["name"] == "data.validate"
         assert info["priority"] == 5
 
@@ -27,7 +27,7 @@ class TestOnDecorator:
         async def handler(self, event):
             pass
 
-        info = handler._orion_event_handlers[0]
+        info = handler._uxok_event_handlers[0]
         assert info["pattern"] == "user.created"
 
 
@@ -84,7 +84,7 @@ class TestDiscoverDecoratedMethods:
                 pass
 
         # Manually set old-format marker (plain string, not dict)
-        FakePlugin.old_handler._orion_event_handlers = ["legacy.event"]
+        FakePlugin.old_handler._uxok_event_handlers = ["legacy.event"]
 
         hooks, events = discover_decorated_methods(FakePlugin())
         assert "legacy.event" in events

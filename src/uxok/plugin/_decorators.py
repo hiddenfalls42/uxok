@@ -10,8 +10,8 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 # Marker attribute names
-_HOOK_MARKER = "_orion_hooks"
-_ON_HANDLER_MARKER = "_orion_event_handlers"
+_HOOK_MARKER = "_uxok_hooks"
+_ON_HANDLER_MARKER = "_uxok_event_handlers"
 
 
 def hook(

@@ -447,7 +447,7 @@ class Core(CoreProtocol):
         # exec (so the import machinery can resolve siblings) and removed in the
         # finally — top-level imports are already bound into the module namespace,
         # so the loaded plugin keeps working and sys.modules stays clean.
-        pkg_name = f"_orion_plugin_{uuid4().hex}"
+        pkg_name = f"_uxok_plugin_{uuid4().hex}"
         module = types.ModuleType(pkg_name)
         # Inject Plugin into the module namespace
         module.__dict__["Plugin"] = Plugin

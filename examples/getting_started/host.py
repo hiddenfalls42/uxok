@@ -1,7 +1,8 @@
-"""host.py — a tiny hot-loader: it loads the two plugins from source and runs them.
+"""host.py — a tiny hot-loader: it loads plugin files from this folder.
 
-Rather than importing the plugin classes, it hands each plugin's source to
-``core.load_plugin`` and lets them coordinate by capability and event. Run it with
+Rather than importing plugin classes or naming them in dependency order, it hands
+every plugin module's source to ``core.load_plugins`` and lets the kernel work out
+the load order from each plugin's declared capabilities. Run it with
 ``python -m examples.getting_started.host``.
 """
 
@@ -17,13 +18,13 @@ if TYPE_CHECKING:
     from uxok.protocols import Event
 
 _HERE = Path(__file__).resolve().parent
+_HOST_FILES = {"__init__.py", "host.py"}
 
 
 async def build_host(core: Core) -> None:
-    """Load the plugins from source — provider (``model``) before requirer (``agent``)."""
-    for name in ("model", "agent"):
-        path = _HERE / f"{name}.py"
-        await core.load_plugin(path.read_text(), origin=str(path))
+    """Load every plugin module in this folder, regardless of dependency order."""
+    paths = [path for path in sorted(_HERE.glob("*.py")) if path.name not in _HOST_FILES]
+    await core.load_plugins([(path.read_text(), str(path)) for path in paths])
 
 
 async def main() -> None:

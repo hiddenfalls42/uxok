@@ -52,6 +52,7 @@
 ```python
 __all__ = [
     "REQUIRED",
+    "BatchLoadError",
     "CapabilityAccessError",
     "CapabilityError",
     "ConfigField",
@@ -71,7 +72,7 @@ from uxok import (
     Core, Plugin, event, hook,
     ConfigField, REQUIRED,
     CoreError, PluginError, CapabilityError,
-    MissingCapabilityError, CapabilityAccessError, StalePluginError,
+    MissingCapabilityError, BatchLoadError, CapabilityAccessError, StalePluginError,
 )
 ```
 
@@ -80,8 +81,8 @@ author and the minimal host application touch directly — the two classes every
 imports (`Core`, `Plugin`), the two decorators on the first line of every plugin
 (`event`, `hook`), config-schema construction (`ConfigField`, `REQUIRED`), and the
 exceptions the framework raises *into* caller code (`CoreError`, `PluginError`,
-`CapabilityError`, `MissingCapabilityError`, `CapabilityAccessError` — see
-[§8](#8-exceptions)). These names are
+`CapabilityError`, `MissingCapabilityError`, `CapabilityAccessError`, `BatchLoadError`
+— see [§8](#8-exceptions)). These names are
 *re-exported* here; their definition homes are `uxok.plugin` and
 `uxok.errors`, both of which remain importable.
 
@@ -150,6 +151,7 @@ See [§7.3 CoreConfig](#73-coreconfig) for the accepted enum values and numeric 
 | `check_plugin` | `async def check_plugin(self, candidate: PluginProtocol) -> AdmissionResult` | `AdmissionResult` (advisory; never raises) | — |
 | `unregister_plugin` | `async def unregister_plugin(self, plugin_id: UUID \| str, *, force: bool = False) -> bool` | `False` if not found | `PluginError` (active-operation or dependents present) |
 | `load_plugin` | `async def load_plugin(self, code: str, origin: str \| None = None) -> bool` | `True` if loaded or reloaded | `CoreError` if not RUNNING, else `PluginError` (compile or module-execution failure, or 0 or >1 Plugin subclass found) |
+| `load_plugins` | `async def load_plugins(self, sources: Iterable[tuple[str, str \| None]]) -> tuple[str, ...]` | plugin names, in commit (topological) order | `CoreError` if not RUNNING, else `BatchLoadError` (phase `"plan"` or `"commit"`, with `cause`, `installed`, `failed`) |
 | `get_plugin` | `async def get_plugin(self, plugin_id: UUID \| str) -> PluginProtocol \| None` | live instance or `None` | — |
 | `list` | `async def list(self) -> PluginCollection` | `PluginCollection` — the single discovery surface (plugins **and** capabilities; see [§10](#10-plugincollection-and-pluginview)) | — |
 | `get_capability` | `async def get_capability(self, capability: str \| type, *, tag: str \| None = None) -> Any` | provider | `CapabilityError` if unavailable; `PluginError` if provider fails protocol contract |
@@ -159,6 +161,9 @@ See [§7.3 CoreConfig](#73-coreconfig) for the accepted enum values and numeric 
 Notes:
 
 - `register_plugin` and `load_plugin` require the core to be `RUNNING` — they raise `CoreError` on a non-running core. Start the core first (`await core.start()` or use `async with Core() as core:`).
+- `load_plugins` also requires `RUNNING` (`CoreError` otherwise). It materializes every source, then commits all of them together under a single hold of the lifecycle lock — one atomic admission, not N separately-locked `load_plugin` calls. Commit order is a topological sort of the candidates' declared `provides`/`requires` (plus any already-live providers), so every candidate's `requires` is already satisfied by the time it is admitted.
+- `load_plugins` is fresh-load-only: a candidate whose `metadata.name` collides with an already-live plugin is a plan-phase error — it does not hot-reload (use `load_plugin` for that).
+- On failure `load_plugins` raises `BatchLoadError`. `phase` (`"plan"` | `"commit"`) discriminates a pre-commit fault (a cycle, a missing capability, a duplicate name, a materialize/compile failure, or — under `error_on_conflict` — a duplicate provider) from a candidate's own `on_start()` failing partway through the commit loop. `installed` is the committed prefix in commit order (always `()` on `phase="plan"`); `failed` names the offending candidate (`None` for graph-wide faults); `cause` is the underlying exception, chained via `from`. Rollback on a `BatchLoadError` is host policy, not kernel behavior — `installed` is the exact teardown handle: feed it to `unregister_plugin` in reverse to unwind, or keep it as-is to accept a partial boot.
 - `unregister_plugin`'s `force` is **keyword-only** (`*, force: bool = False`).
 - `get_capability`'s `tag` is **keyword-only**. When `capability` is a `type`, it is
   resolved to a name via `derive_capability_name` before lookup.
@@ -673,7 +678,7 @@ The faults a candidate would raise against the *live* graph, computed without co
 
 ## 8. Exceptions
 
-Defined in `src/uxok/errors.py`. All six are **re-exported at top-level
+Defined in `src/uxok/errors.py`. All seven are **re-exported at top-level
 `uxok`** and also importable from `uxok.errors`. They are public not because
 plugins raise them — plugins almost never do — but because the framework raises them
 *into* caller code, so authors and the host must be able to name them in `except`
@@ -682,6 +687,7 @@ direction (raised to the caller, or caught by the caller).
 
 ```python
 from uxok import (  # canonical
+    BatchLoadError,
     CapabilityAccessError,
     CapabilityError,
     CoreError,
@@ -691,6 +697,7 @@ from uxok import (  # canonical
 )
 # also valid (definition home):
 from uxok.errors import (
+    BatchLoadError,
     CapabilityAccessError,
     CapabilityError,
     CoreError,
@@ -706,7 +713,8 @@ Inheritance:
 Exception
 └── CoreError
     ├── PluginError
-    │   └── StalePluginError
+    │   ├── StalePluginError
+    │   └── BatchLoadError       (a load_plugins() batch failed)
     └── CapabilityError
         ├── MissingCapabilityError   (required capability absent at registration)
         └── CapabilityAccessError    (capability exists, but outside the caller's runtime grant)
@@ -725,6 +733,7 @@ Constructors:
 - `CapabilityError.__init__(self, capability: str | list[str] | None, available: list[str] | None = None, message: str | None = None)` — when `message` is given, it is used verbatim; otherwise the message is built from `capability` and (optionally) `available` as suggestions.
 - `MissingCapabilityError.__init__(self, missing: list[str], phase: str = "register", available: list[str] | None = None, requirer: str | None = None)` — sets `self.missing: list[str]`, `self.phase: str`, and `self.requirer: str | None` (the name of the plugin whose `requires` failed, when known); delegates to `CapabilityError`.
 - `CapabilityAccessError.__init__(self, capability: str, plugin_name: str, declared: list[str] | None = None)` — sets `self.capability: str` and `self.plugin_name: str`; delegates to `CapabilityError`. The `declared` argument carries the caller's full runtime grant (`requires ∪ resolves`) for the message. Raised by `Plugin.get_capability` / the `CoreFacet` when, under `capability_access="declared"`/`"sealed"`, a plugin resolves a capability outside its runtime grant and without the `kernel.dispatch` grant (RFC 0001 §3.2, RFC 0002 §3.2).
+- `BatchLoadError.__init__(self, *, phase: str, cause: BaseException, installed: tuple[str, ...] = (), failed: str | None = None)` — keyword-only; inherits from `PluginError`. Raised by `Core.load_plugins` (RFC 0008). Sets four attributes: `phase` — `"plan"` (a pre-commit fault: cycle, missing capability, duplicate name, materialize/compile failure, or duplicate provider under `error_on_conflict`; `installed` is always `()`) or `"commit"` (a candidate's own `on_start()` raised partway through the batch); `cause` — the underlying exception, also chained via `from`; `installed` — the plugins committed before the failure, in commit order, the exact handle for host-side rollback; `failed` — the offending candidate's origin/name, or `None` for graph-wide faults such as a cycle.
 
 ---
 
@@ -893,11 +902,12 @@ from uxok import (
     Core, Plugin, event, hook,
     ConfigField, REQUIRED,
     CoreError, PluginError, CapabilityError,
-    MissingCapabilityError, CapabilityAccessError, StalePluginError,
+    MissingCapabilityError, BatchLoadError, CapabilityAccessError, StalePluginError,
 )
 
 __all__ = [
     "REQUIRED",
+    "BatchLoadError",
     "CapabilityAccessError",
     "CapabilityError",
     "ConfigField",
@@ -955,6 +965,7 @@ from uxok.plugin import (
 
 ```python
 from uxok.errors import (
+    BatchLoadError,
     CapabilityAccessError,
     CapabilityError,
     CoreError,
@@ -964,7 +975,7 @@ from uxok.errors import (
 )
 ```
 
-All five are also re-exported at top-level `uxok` (the canonical author path).
+All seven are also re-exported at top-level `uxok` (the canonical author path).
 `uxok.errors` remains importable as their definition home.
 
 ### `uxok.registry`

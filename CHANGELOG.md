@@ -8,15 +8,17 @@ commit as its CHANGELOG entry.
 
 ## [Unreleased]
 
+### Added
+- `Core.load_plugins(sources)` (RFC 0008): boots a batch of `(code, origin)` plugin
+  sources in one call, computing load order from the candidates' `provides`/`requires`
+  and committing them together under a single hold of the lifecycle lock. Returns plugin
+  names in commit order; fresh-load-only (no hot-reload in a batch). On failure raises
+  the new `BatchLoadError` (`PluginError` subclass), which carries `phase` (`"plan"` |
+  `"commit"`), `cause`, `installed` (the committed prefix, in commit order), and `failed`
+  so the host can implement its own rollback-or-keep policy. `docs/manifests/API.md` §2.2
+  and §8 updated in this commit.
+
 ### Changed
-- Documentation: `self.get_capability(...)` is now the single canonical plugin-author idiom
-  for resolving a capability (the convenience sibling of `self.emit`/`self.hook`/
-  `self.config`). `self.core.get_capability(...)` is demoted to an internal facet /
-  security-model detail — it remains callable and enforces the identical `requires ∪ resolves`
-  gate (it is the gated `CoreFacet` route exercised by the secure-capability suite), but is no
-  longer presented as a co-equal plugin idiom and is removed from reader-facing usage examples
-  (README, tutorial). **No runtime behavior change**: both routes still work identically; this
-  is a docs/guidance clarification only.
 - Capability-collision error message: under `capability_collision="error_on_conflict"`, a
   rejected second provider now raises `PluginError` with
   `Capability '<name>' is already provided by: <providers> (capability_collision policy is
@@ -58,6 +60,14 @@ commit as its CHANGELOG entry.
   updated in this commit).
 - `MissingCapabilityError.__init__` gained a trailing optional `requirer: str | None = None`
   keyword (additive; sets `self.requirer`). Positional construction is unaffected.
+- Documentation: `self.get_capability(...)` is now the single canonical plugin-author idiom
+  for resolving a capability (the convenience sibling of `self.emit`/`self.hook`/
+  `self.config`). `self.core.get_capability(...)` is demoted to an internal facet /
+  security-model detail — it remains callable and enforces the identical `requires ∪ resolves`
+  gate (it is the gated `CoreFacet` route exercised by the secure-capability suite), but is no
+  longer presented as a co-equal plugin idiom and is removed from reader-facing usage examples
+  (README, tutorial). **No runtime behavior change**: both routes still work identically; this
+  is a docs/guidance clarification only.
 
 ### Added
 - Ambient `check_plugin` on the attenuated facet (RFC 0006): `CoreFacet` now forwards

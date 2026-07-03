@@ -1,11 +1,13 @@
 # Getting started
 
-You will build a small package called `chat/`: two plugins and a *host* that wires
-them together on a `Core` and runs them. The program is a toy — a two-line
+You will build a small package called `chat/`: two plugins and a *host* that loads
+whatever plugin modules are in the folder. The program is a toy — a two-line
 conversation — but the shape is real: plugins that never import each other,
 connected only through the kernel by name. The
 [README](https://github.com/hiddenfalls42/uxok#quick-start) shows the same program
-crammed into one script; this tutorial teaches the layout you actually want.
+crammed into one script — wired differently, too: there the script constructs the
+plugin instances and hands them to `register_plugin`, where this host loads their
+source. This tutorial teaches the layout you actually want.
 
 ## What you will build
 
@@ -15,8 +17,8 @@ A package called `chat/` with three modules:
   `"persona"` hook
 - `agent.py` — a plugin that *requires* `"llm"`, drives a turn-by-turn conversation
   over the event bus, and emits a done event when finished
-- `host.py` — a tiny host that loads the two plugins from *source* and runs them to
-  completion
+- `host.py` — a tiny host that loads plugin modules from *source* and stays alive
+  until the plugins finish
 
 Running it prints four lines:
 
@@ -157,10 +159,11 @@ priority order — a pipeline rather than a single answer.
 ## The host: `host.py`
 
 ```python
-"""host.py — a tiny hot-loader: it loads the two plugins from source and runs them.
+"""host.py — a tiny hot-loader: it loads plugin files from this folder.
 
-Rather than importing the plugin classes, it hands each plugin's source to
-``core.load_plugin`` and lets them coordinate by capability and event. Run it with
+Rather than importing plugin classes or naming them in dependency order, it hands
+every plugin module's source to ``core.load_plugins`` and lets the kernel work out
+the load order from each plugin's declared capabilities. Run it with
 ``python -m examples.getting_started.host``.
 """
 
@@ -176,13 +179,13 @@ if TYPE_CHECKING:
     from uxok.protocols import Event
 
 _HERE = Path(__file__).resolve().parent
+_HOST_FILES = {"__init__.py", "host.py"}
 
 
 async def build_host(core: Core) -> None:
-    """Load the plugins from source — provider (``model``) before requirer (``agent``)."""
-    for name in ("model", "agent"):
-        path = _HERE / f"{name}.py"
-        await core.load_plugin(path.read_text(), origin=str(path))
+    """Load every plugin module in this folder, regardless of dependency order."""
+    paths = [path for path in sorted(_HERE.glob("*.py")) if path.name not in _HOST_FILES]
+    await core.load_plugins([(path.read_text(), str(path)) for path in paths])
 
 
 async def main() -> None:
@@ -207,19 +210,24 @@ starts the kernel on entry and tears it down on exit. (For manual `start()`/`sto
 see [manage core lifecycle](../how-to/how-to-manage-core-lifecycle.md).)
 
 **It loads plugins from source, it does not import them.** `build_host` never
-mentions the `Model` or `Agent` classes; it reads their `.py` files and passes the
-text to `core.load_plugin(...)`, and the kernel compiles, registers, and starts each
-one. Because the kernel builds the instance itself, hot-loaded plugins take **no
-constructor arguments**. That is why the agent carries its own line queue and signals
-completion by event. This is uxok's "downloaded policy"; see the
+mentions `model.py`, `agent.py`, `Model`, or `Agent`. It scans the folder, reads each
+candidate plugin file, hands the whole set to `core.load_plugins(...)`, and the kernel
+compiles, registers, and starts each one. Because the kernel builds the instance
+itself, hot-loaded plugins take **no constructor arguments**. That is why the agent
+carries its own line queue and signals completion by event. This is uxok's
+"downloaded policy"; see the
 [capability system](../explanation/capability-system.md) and
 [use hot reload](../how-to/how-to-use-hot-reload.md) for why it matters.
 
-**Load order follows the `requires` edges.** The kernel checks `requires` when a
-plugin loads and raises `MissingCapabilityError` if nothing provides the capability
-yet, so `build_host` loads `model` (provides `"llm"`) before `agent` (requires it).
-That is the only ordering constraint — see
-[boot a plugin graph in order](../how-to/how-to-boot-a-plugin-graph-in-order.md).
+**Load order still follows the `requires` edges, but the host does not name them.**
+`load_plugins` materializes every source, reads each plugin's `provides`/`requires`,
+and computes a topological order so every provider starts before the plugins that
+require it — then commits the whole batch under a single hold of the lifecycle lock.
+A malformed graph fails as a unit: a missing capability or a dependency cycle raises
+`BatchLoadError` in the *plan* phase, before any plugin is registered, so a bad graph
+never leaves half a system running. See
+[boot a plugin graph in order](../how-to/how-to-boot-a-plugin-graph-in-order.md)
+for the rollback recipes and the lower-level manual alternative.
 
 `main()` subscribes `_stop` to `"conversation.over"` *before* loading the plugins,
 then waits on an `asyncio.Event` the handler sets. Loading the agent starts it, so
@@ -269,6 +277,8 @@ To go deeper on any one primitive:
 - [Capability system](../explanation/capability-system.md) — resolution by name, provider selection
 - [Event system](../explanation/event-system.md) — pub/sub design, concurrent dispatch
 - [Use hot reload](../how-to/how-to-use-hot-reload.md) — `core.load_plugin()`, state handoff
+- [Use tags for provider selection](../how-to/how-to-use-tags-for-provider-selection.md) —
+  the first thing you need once two plugins provide the same capability
 
 The [how-to](../how-to/index.md) and [explanation](../explanation/index.md) index
 pages list the rest, one page per primitive.

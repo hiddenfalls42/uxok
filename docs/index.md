@@ -36,7 +36,7 @@ async def main():
 asyncio.run(main())
 ```
 
-See [Getting started](tutorials/getting-started.md) for a complete walk-through that registers two dependent plugins and runs them end-to-end.
+See [Getting started](tutorials/getting-started.md) for a complete walk-through that loads two dependent plugins from source and runs them end-to-end.
 
 ## Documentation
 

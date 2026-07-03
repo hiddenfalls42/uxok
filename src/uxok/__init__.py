@@ -4,6 +4,7 @@ from importlib.metadata import PackageNotFoundError, version
 
 from uxok.core import Core
 from uxok.errors import (
+    BatchLoadError,
     CapabilityAccessError,
     CapabilityError,
     CoreError,
@@ -20,6 +21,7 @@ except PackageNotFoundError:  # running from a source tree without install metad
 
 __all__ = [
     "REQUIRED",
+    "BatchLoadError",
     "CapabilityAccessError",
     "CapabilityError",
     "ConfigField",

@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
     from uuid import UUID
 
     from uxok.protocols._types import CoreState, PluginId
@@ -119,6 +120,33 @@ class Core(Protocol):
 
         Raises:
             PluginError: If no Plugin subclass is found, or loading fails.
+        """
+        ...
+
+    async def load_plugins(self, sources: Iterable[tuple[str, str | None]]) -> tuple[str, ...]:
+        """Boot a batch of plugin sources in dependency order, committed as one unit.
+
+        Materializes every source, computes a topological commit order from
+        the candidates' declared ``provides``/``requires`` plus already-live
+        providers, then commits the whole plan under one hold of the
+        lifecycle lock. Fresh-load-only: a source whose plugin name matches an
+        already-live plugin is a plan-phase error — use :meth:`load_plugin` to
+        hot-reload an existing plugin.
+
+        Args:
+            sources: ``(code, origin)`` pairs, one per plugin — the same shape
+                as ``load_plugin``'s arguments. ``origin`` may be ``None``.
+
+        Returns:
+            Plugin names, in commit (topological) order. ``()`` for an empty
+            ``sources``.
+
+        Raises:
+            CoreError: If the core is not in RUNNING state.
+            BatchLoadError: If materializing, planning, or committing any
+                source fails. ``phase`` discriminates a pre-commit graph fault
+                (``"plan"``, ``installed == ()``) from a mid-batch commit
+                failure (``"commit"``, ``installed`` is the live prefix).
         """
         ...
 

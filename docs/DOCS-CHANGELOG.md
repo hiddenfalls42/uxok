@@ -2,9 +2,17 @@
 
 <!-- One line per note added, updated, or removed. Format: YYYY-MM-DD | action | path — description -->
 
+2026-07-03 | updated | docs/manifests/API.md — RFC 0008: added BatchLoadError to §1 __all__/import block and §11 uxok/uxok.errors blocks (twelve->thirteen top-level names); added load_plugins row + Notes to §2.2; added BatchLoadError to §8 inheritance tree, both import blocks, and Constructors (six->seven exceptions)
+2026-07-03 | updated | docs/how-to/how-to-boot-a-plugin-graph-in-order.md — RFC 0008: new lead section "Boot the whole graph with load_plugins" (sources list, both host rollback recipes); demoted manual-ordering/build_host/polling sections to steps 2-4
+2026-07-03 | updated | docs/how-to/index.md — boot-a-plugin-graph blurb now leads with core.load_plugins()
+2026-07-03 | updated | docs/explanation/framework-philosophy.md — RFC 0008: public export count corrected to thirteen (BatchLoadError added)
+2026-07-03 | updated | docs/proposals/0008-batch-plugin-loading.md — Status flipped Draft -> Accepted
 2026-07-03 | updated | docs/how-to/how-to-use-capability-policies.md — collision example output tracks the fixed source message ("already provided by: storage_plugin_a …" — was the misleading "not available" wording, and the old comment also showed the class name where the runtime prints the snake_case plugin name)
 2026-07-03 | updated | docs/how-to/how-to-manage-plugin-dependencies.md — auditor H-1: §2 example now calls core.start() before register_plugin (raised CoreError as written)
 2026-07-03 | updated | docs/explanation/state-management.md — auditor M-2: core.plugin_error/core.hook_error are events, not hooks
+2026-07-03 | updated | docs/explanation/framework-philosophy.md — auditor M-1: public export count corrected to twelve; REQUIRED sentinel added to the primitive list
+2026-07-03 | updated | docs/index.md — auditor L-1: tutorial pointer says "loads … from source" (was "registers"), matching the tutorial's hot-loading mechanism
+2026-07-03 | updated | docs/tutorials/getting-started.md — auditor L-2/M-001: noted the README wires via register_plugin where the tutorial hot-loads; added tags-for-provider-selection to next steps; sync claim now enforced by a byte-level code-block comparison in tests/test_getting_started.py
 
 2026-06-30 | updated | docs/manifests/API.md — register_plugin/load_plugin raises: added CoreError if not RUNNING; added RUNNING-requirement note
 2026-06-30 | updated | docs/how-to/how-to-manage-core-lifecycle.md — removed the "Register a plugin before starting" section (auto-start removed); renumbered subsequent steps

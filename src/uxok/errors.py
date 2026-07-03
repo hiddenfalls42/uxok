@@ -1,6 +1,7 @@
 """Error hierarchy for the core system."""
 
 __all__ = [
+    "BatchLoadError",
     "CapabilityAccessError",
     "CapabilityError",
     "CoreError",
@@ -74,6 +75,37 @@ class StalePluginError(PluginError):
     methods) is attempted on it.  Callers using the EAFP pattern must catch
     this to handle the case where a plugin disappears during an await.
     """
+
+
+class BatchLoadError(PluginError):
+    """A load_plugins() batch failed.
+
+    Carries how far the boot got (``installed``, in commit order) so the host
+    can enforce its own rollback-or-keep policy instead of introspecting the
+    registry. ``phase`` discriminates the two failure classes: ``"plan"`` is a
+    pre-commit, graph-wide fault (cycle, missing capability, duplicate
+    provider/name, materialize/compile failure) where ``installed`` is always
+    empty; ``"commit"`` is a failure partway through installing the plan,
+    where ``installed`` lists everything committed before the failing
+    candidate. ``failed`` is the offending candidate's origin/name, or
+    ``None`` for graph-wide faults such as a cycle.
+    """
+
+    def __init__(
+        self,
+        *,
+        phase: str,
+        cause: BaseException,
+        installed: tuple[str, ...] = (),
+        failed: str | None = None,
+    ) -> None:
+        self.phase = phase
+        self.cause = cause
+        self.installed = installed
+        self.failed = failed
+        loc = f" at '{failed}'" if failed else ""
+        prefix = f" (installed so far: {', '.join(installed)})" if installed else ""
+        super().__init__(f"Batch load failed during {phase}{loc}: {cause}{prefix}")
 
 
 class CapabilityAccessError(CapabilityError):

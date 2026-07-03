@@ -16,7 +16,7 @@ Start here — the kernel's core wiring mechanism, where plugins declare what th
 ## Core lifecycle
 
 - [Manage core lifecycle](how-to-manage-core-lifecycle.md) — Start, stop, restart, and observe state transitions through `INITIALIZED → RUNNING → STOPPING → STOPPED`.
-- [Boot a plugin graph in order](how-to-boot-a-plugin-graph-in-order.md) — Register providers before consumers, factor the sequence into `build_host()`, and poll for capabilities that arrive asynchronously.
+- [Boot a plugin graph in order](how-to-boot-a-plugin-graph-in-order.md) — Boot a batch of sources with `core.load_plugins()`, or fall back to manual ordering, `build_host()` factoring, and polling for capabilities that arrive asynchronously.
 - [Shut down gracefully](how-to-shut-down-gracefully.md) — Build a `ShutdownHandler` that traps OS signals and the `system.shutdown` event, and blocks `main()` until shutdown is requested.
 - [Use hot reload](how-to-use-hot-reload.md) — Load or swap plugins at runtime without restarting the core, using `core.load_plugin()`.
 

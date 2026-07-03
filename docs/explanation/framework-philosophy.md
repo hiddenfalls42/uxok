@@ -1,10 +1,10 @@
 # Framework philosophy
 
-uxok is a framework, not a product. That distinction is not a slogan — it is the load-bearing decision from which everything else follows. A framework supplies building blocks and leaves decisions to the builder; a product makes those decisions and enforces them. uxok supplies primitives (`Core`, `Plugin`, `event`, `hook`, `ConfigField`, the capability errors) and then steps aside.
+uxok is a framework, not a product. That distinction is not a slogan — it is the load-bearing decision from which everything else follows. A framework supplies building blocks and leaves decisions to the builder; a product makes those decisions and enforces them. uxok supplies primitives (`Core`, `Plugin`, `event`, `hook`, `ConfigField`, the `REQUIRED` sentinel, and the error types) and then steps aside.
 
 ## Why the kernel stays small
 
-The public surface of `uxok` exports exactly eleven names. That number is deliberate restraint, not incompleteness. The event bus, the hook system, the plugin registry, the capability system, and the base `Plugin` class are the irreducible minimum that every application needs. Every other feature — supervision, storage, metrics, tracing — is built on top of those primitives as a plugin, not embedded in the core.
+The public surface of `uxok` exports exactly thirteen names. That number is deliberate restraint, not incompleteness. The event bus, the hook system, the plugin registry, the capability system, and the base `Plugin` class are the irreducible minimum that every application needs. Every other feature — supervision, storage, metrics, tracing — is built on top of those primitives as a plugin, not embedded in the core.
 
 The analogy is structural: uxok's relationship to its plugins resembles the Linux kernel's relationship to user space. The kernel provides syscall primitives; user space provides everything worth doing. uxok provides `Core` and `Plugin`; the ecosystem provides the application. The boundary matters because coupling works in one direction: plugins import the kernel, and the kernel never imports a plugin. Break that rule and the kernel acquires opinions it should not have.
 

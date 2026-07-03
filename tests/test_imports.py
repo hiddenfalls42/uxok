@@ -18,6 +18,7 @@ import pytest
 # ``uxok.__all__``. Maintained deliberately alongside the constitution.
 EXPECTED_TOP_LEVEL = [
     "REQUIRED",
+    "BatchLoadError",
     "CapabilityAccessError",
     "CapabilityError",
     "ConfigField",

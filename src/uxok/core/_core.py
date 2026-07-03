@@ -16,7 +16,13 @@ from uxok.core._shared_utils import (
     resolve_plugin,
 )
 from uxok.core._state_manager import StateManager
-from uxok.errors import CapabilityError, CoreError, PluginError
+from uxok.errors import (
+    BatchLoadError,
+    CapabilityError,
+    CoreError,
+    MissingCapabilityError,
+    PluginError,
+)
 from uxok.events._bus import _EventBus
 from uxok.hooks._system import _HookSystem
 from uxok.protocols import (
@@ -34,8 +40,11 @@ from uxok.protocols.hooks import HookSystem
 from uxok.protocols.registry import Registry
 from uxok.timing._clock import TickClock
 from uxok.timing._scheduler import TickScheduler
+from uxok.utils import topo_sort
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
     from uxok.registry._plugin_view import PluginCollection
 
 from uxok.protocols.events import Event
@@ -597,6 +606,198 @@ class Core(CoreProtocol):
             # FRESH LOAD: use the instance we already created
             await self._register_plugin_now(temp_instance)
             logger.info("Plugin loaded", extra=log_op("load_plugin", plugin_name=plugin_name))
+
+    def _plan_batch_order(
+        self,
+        candidates: list[tuple[PluginProtocol, str]],
+        live_names: frozenset[str],
+    ) -> list[tuple[PluginProtocol, str]]:
+        """Compute a fresh-load commit order for a batch of materialized candidates.
+
+        Pure, synchronous, lock-free (RFC 0008 §4.3): every capability-system
+        read used here (``missing_requirements``, ``provides_conflicts``,
+        ``_resolve_collision_policy``) is itself synchronous, so this method
+        holds no lock and contains no ``await`` — the same lock-free invariant
+        the registry/capability-system mutations honor (decision record #12).
+
+        Checks run in this order; the first fault found raises a plan-phase
+        ``BatchLoadError`` and nothing is committed (``installed`` stays the
+        default ``()``):
+
+        1. A duplicate ``name`` within the batch.
+        2. A candidate's ``name`` collides with a live plugin — batch loading
+           is fresh-load-only (RFC 0008 §4.7); a name that already exists must
+           go through :meth:`load_plugin` to hot-reload.
+        3. (only when ``capability_collision == "error_on_conflict"``) a
+           candidate's provided capability collides with a live provider, or
+           with another candidate in the batch.
+        4. A candidate's missing requirement has no in-batch provider and no
+           live provider.
+        5. A cycle in the resulting candidate dependency graph.
+
+        Args:
+            candidates: Materialized ``(instance, name)`` pairs, none yet
+                registered.
+            live_names: Names of plugins already registered, snapshotted by
+                the caller before planning.
+
+        Returns:
+            ``candidates`` reordered into a valid topological commit order —
+            every candidate that provides a capability another candidate
+            requires precedes every candidate that requires it (consumer
+            after ALL in-batch providers, RFC 0008 §4.3).
+
+        Raises:
+            BatchLoadError: ``phase="plan"``, for any of the faults above.
+        """
+        caps = self._capability_system
+
+        cause: BaseException
+        by_name: dict[str, PluginProtocol] = {}
+        for instance, name in candidates:
+            if name in by_name:
+                cause = PluginError(f"Duplicate plugin name '{name}' in batch load")
+                raise BatchLoadError(phase="plan", cause=cause, failed=name) from cause
+            if name in live_names:
+                cause = PluginError(
+                    f"Plugin '{name}' is already live; use load_plugin() to hot-reload"
+                )
+                raise BatchLoadError(phase="plan", cause=cause, failed=name) from cause
+            by_name[name] = instance
+
+        providers: dict[str, list[str]] = {}
+        for name, instance in by_name.items():
+            for capability in instance.metadata.provides:
+                providers.setdefault(capability, []).append(name)
+
+        if caps._resolve_collision_policy() == "error_on_conflict":
+            for name, instance in by_name.items():
+                live_conflicts = caps.provides_conflicts(instance)
+                if live_conflicts:
+                    capability = sorted(live_conflicts)[0]
+                    cause = caps._collision_error(capability, caps._capabilities[capability])
+                    raise BatchLoadError(phase="plan", cause=cause, failed=name) from cause
+
+            for capability, providing_names in providers.items():
+                if len(providing_names) > 1:
+                    cause = caps._collision_error(capability, [by_name[n] for n in providing_names])
+                    raise BatchLoadError(phase="plan", cause=cause, failed=None) from cause
+
+        deps: dict[str, set[str]] = {name: set() for name in by_name}
+        for name, instance in by_name.items():
+            for capability in caps.missing_requirements(instance):
+                in_batch_providers = providers.get(capability)
+                if in_batch_providers:
+                    deps[name].update(in_batch_providers)
+                else:
+                    available = sorted(set(caps._capabilities) | set(providers))
+                    cause = MissingCapabilityError(
+                        [capability], phase="plan", available=available, requirer=name
+                    )
+                    raise BatchLoadError(phase="plan", cause=cause, failed=name) from cause
+
+        ordered_names, unresolved = topo_sort(by_name.keys(), deps)
+        if unresolved:
+            members = sorted(unresolved)
+            cause = CoreError(
+                "Circular dependency detected in batch load order; "
+                f"plugins involved: {', '.join(members)}"
+            )
+            raise BatchLoadError(phase="plan", cause=cause, failed=None) from cause
+
+        return [(by_name[name], name) for name in ordered_names]
+
+    async def load_plugins(self, sources: Iterable[tuple[str, str | None]]) -> tuple[str, ...]:
+        """Boot a batch of plugin sources in dependency order, committed as one unit.
+
+        Three phases (RFC 0008 §4.1):
+
+        1. **Materialize** — every ``(code, origin)`` source is compiled,
+           exec'd, and instantiated via :meth:`_materialize_plugin`. No
+           registry access, no lock.
+        2. **Plan** — :meth:`_plan_batch_order` computes a topological commit
+           order from the candidates' declared ``provides``/``requires`` plus
+           a snapshot of already-live providers. Pure computation; every
+           graph-shape fault (cycle, missing capability, duplicate name, and —
+           under ``error_on_conflict`` — duplicate provider) is caught here,
+           so a plan-phase failure leaves the registry untouched.
+        3. **Commit** — the whole plan is installed under one hold of the
+           reentrant lifecycle lock via :meth:`_register_plugin_now`, in plan
+           order. Because the plan orders providers before their consumers,
+           each candidate's ``requires`` is already satisfied at its own
+           admission.
+
+        Fresh-load-only (RFC 0008 §4.7): every source becomes a brand-new
+        registration. A source whose plugin name matches an already-live
+        plugin is rejected in the plan phase — use :meth:`load_plugin` to
+        hot-reload an existing plugin; rolling back a hot-reload mid-batch is
+        not supported, so batch loading deliberately does not attempt it.
+
+        The lifecycle lock (``_ReentrantLock``) is reentrant, so a plugin's
+        ``on_start()`` calling back into ``load_plugin``/``load_plugins``
+        during commit does not deadlock — the same reentrancy
+        :meth:`load_plugin` already relies on.
+
+        There is a benign plan→commit TOCTOU: the plan is computed before the
+        lock is taken, so a concurrent registration between planning and
+        commit can invalidate an assumption the plan made (e.g. a capability
+        that looked live is gone by commit time). :meth:`_register_plugin_now`
+        re-validates every candidate under the lock regardless of the plan, so
+        a stale plan can only degrade to a ``phase="commit"`` failure with an
+        accurate ``installed`` prefix — never registry corruption.
+
+        Args:
+            sources: ``(code, origin)`` pairs, one per plugin — the same shape
+                as ``load_plugin``'s arguments. ``origin`` may be ``None``.
+
+        Returns:
+            Plugin names, in commit (topological) order. ``()`` for an empty
+            ``sources``.
+
+        Raises:
+            CoreError: If the core is not in RUNNING state.
+            BatchLoadError: If materializing, planning, or committing any
+                source fails. ``phase`` is ``"plan"`` (nothing was committed;
+                ``installed == ()``) or ``"commit"`` (``installed`` is the
+                live prefix that started successfully before the failure).
+                See RFC 0008 §4.8 for host rollback recipes built entirely on
+                ``e.installed`` plus the public ``unregister_plugin``/
+                ``get_plugin`` API.
+        """
+        if self.state is not CoreState.RUNNING:
+            raise CoreError("Core must be started before loading plugins")
+
+        candidates: list[tuple[PluginProtocol, str]] = []
+        for code, origin in list(sources):
+            try:
+                instance, name = await self._materialize_plugin(code, origin)
+            except Exception as e:
+                # Any materialize failure — compile, module-top-level exec, a
+                # bad Plugin subclass count, or the plugin's own __init__ raising
+                # — is a plan-phase fault: nothing has been committed, so the
+                # host gets a structured BatchLoadError, not a raw exception.
+                raise BatchLoadError(phase="plan", cause=e, failed=origin) from e
+            candidates.append((instance, name))
+
+        live_names = frozenset(p.metadata.name for p in (await self._registry.all()).values())
+
+        ordered = self._plan_batch_order(candidates, live_names)
+
+        installed: list[str] = []
+        async with self._lifecycle_lock:
+            for instance, _name in ordered:
+                try:
+                    await self._register_plugin_now(instance)
+                except Exception as e:
+                    raise BatchLoadError(
+                        phase="commit",
+                        cause=e,
+                        installed=tuple(installed),
+                        failed=instance.metadata.name,
+                    ) from e
+                installed.append(instance.metadata.name)
+
+        return tuple(installed)
 
     async def unregister_plugin(self, plugin_id: PluginId | str, *, force: bool = False) -> bool:
         """Unregister a plugin.

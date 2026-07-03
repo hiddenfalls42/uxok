@@ -86,8 +86,7 @@ plans/
 docs/agent_data/
 
 # Manifests: only the programmatically-tested API.md is public for now.
-docs/manifests/FRAMEWORK_PHILOSOPHY.md
-docs/manifests/KERNEL_ARCHITECTURE.md
+# (FRAMEWORK_PHILOSOPHY.md and KERNEL_ARCHITECTURE.md are retired tombstones — now tracked.)
 # Design RFCs: internal process, kept local for now.
 docs/proposals/
 

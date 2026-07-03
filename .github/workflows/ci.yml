@@ -145,8 +145,10 @@ jobs:
         run: pip install -e ".[dev]"
       - name: Bandit
         run: bandit -r src
-      - name: Safety
-        run: safety check
+      # pip-audit replaces the deprecated `safety check` (which now requires an
+      # account/auth). Audits the installed dependency set for known CVEs.
+      - name: pip-audit
+        run: pip-audit
 
   perf:
     name: Performance benchmarks (non-blocking)

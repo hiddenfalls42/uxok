@@ -27,7 +27,10 @@ classifiers = [
 dependencies = []
 
 [project.urls]
+Homepage = "https://hiddenfalls42.github.io/uxok/"
+Documentation = "https://hiddenfalls42.github.io/uxok/"
 Repository = "https://github.com/hiddenfalls42/uxok"
+Issues = "https://github.com/hiddenfalls42/uxok/issues"
 Changelog = "https://github.com/hiddenfalls42/uxok/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]

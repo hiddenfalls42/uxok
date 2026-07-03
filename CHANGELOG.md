@@ -86,6 +86,11 @@ commit as its CHANGELOG entry.
   grant and points at `resolves`.
 
 ### Changed
+- **Breaking (pre-1.0):** `Plugin.hook` is now a class-level method instead of an
+  instance-attribute closure assigned in `__init__`. The call signature is identical;
+  subclasses that override `hook` or depend on `Plugin.__init__` assigning `self.hook`
+  must be updated. `emit` and `hook` share a new `_defer(at_tick, factory)` helper that
+  eliminates the duplicated tick-validation logic.
 - **Breaking (pre-1.0):** `Plugin.config()` no longer falls through to `CoreConfig` as a
   last resort. The lookup order is now: (1) plugin-scoped `plugin_configs` value; (2) schema
   default; (3) the `default` argument. Plugins that previously read `CoreConfig` fields by

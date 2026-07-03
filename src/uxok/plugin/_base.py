@@ -177,59 +177,6 @@ class Plugin(PluginProtocol):
         self._hooks.update(hooks)
         self._event_handlers.update(event_handlers)
 
-        # Create direct hook method (delegates to hook system)
-        def hook_method(
-            name: str,
-            *args: Any,
-            at_tick: int | None = None,
-            firstresult: bool = False,
-            **kwargs: Any,
-        ) -> Any:
-            """Execute hooks by name.
-
-            Args:
-                name: Hook name
-                *args: Positional arguments passed to hooks
-                at_tick: If provided, defer execution until this tick number.
-                         Must be > core.tick at call time. Raises ValueError if
-                         in the past. Returns None (fire-and-forget).
-                firstresult: If True, return first non-None result immediately.
-                **kwargs: Keyword arguments passed to hooks
-
-            Returns:
-                Hook results (list, or first non-None when firstresult=True),
-                or None when at_tick is set (deferred; result unavailable).
-            """
-            if at_tick is not None:
-                current_tick = self.__core_real.tick
-                if at_tick <= current_tick:
-                    raise ValueError(
-                        f"at_tick={at_tick} is in the past (current tick={current_tick}). "
-                        "Use core.tick + N for future scheduling."
-                    )
-                self.__core_real._tick_scheduler.schedule_at(  # type: ignore[attr-defined]
-                    at_tick,
-                    current_tick,
-                    factory=lambda: self.__core_real.hooks.execute(
-                        name,
-                        *args,
-                        firstresult=firstresult,
-                        plugin_id=str(self._metadata.id),
-                        **kwargs,
-                    ),
-                    owner=self,
-                )
-                return None
-            return self.__core_real.hooks.execute(
-                name,
-                *args,
-                firstresult=firstresult,
-                plugin_id=str(self._metadata.id),
-                **kwargs,
-            )
-
-        self.hook = hook_method
-
     # ========== Essential Properties ==========
 
     @property
@@ -430,6 +377,30 @@ class Plugin(PluginProtocol):
 
     # ========== Convenience Methods ==========
 
+    def _defer(self, at_tick: int, factory: Callable[[], Any]) -> None:
+        """Schedule *factory* for execution at *at_tick*.
+
+        Shared by :meth:`emit` and :meth:`hook`. Validates the tick is in the
+        future and delegates to the TickScheduler. ``owner=self`` binds the
+        scheduled entry to this plugin instance so hot-reload drains the old
+        instance's deferred work without touching the new one's.
+
+        Raises:
+            ValueError: If ``at_tick <= core.tick`` (tick is in the past).
+        """
+        current_tick = self.__core_real.tick
+        if at_tick <= current_tick:
+            raise ValueError(
+                f"at_tick={at_tick} is in the past (current tick={current_tick}). "
+                "Use core.tick + N for future scheduling."
+            )
+        self.__core_real._tick_scheduler.schedule_at(  # type: ignore[attr-defined]
+            at_tick,
+            current_tick,
+            factory=factory,
+            owner=self,
+        )
+
     async def emit(self, event_name: str, data: Any = None, *, at_tick: int | None = None) -> None:
         """Convenience: Publish an event.
 
@@ -448,24 +419,57 @@ class Plugin(PluginProtocol):
         """
         if at_tick is not None:
             event = Event(event_name, data, source=self._metadata.name)
-            current_tick = self.__core_real.tick
-            # Validate immediately — fail fast
-            if at_tick <= current_tick:
-                raise ValueError(
-                    f"at_tick={at_tick} is in the past (current tick={current_tick}). "
-                    "Use core.tick + N for future scheduling."
-                )
-            # Schedule via TickScheduler
-            self.__core_real._tick_scheduler.schedule_at(  # type: ignore[attr-defined]
-                at_tick,
-                current_tick,
-                factory=lambda: self.__core_real.events.publish(event),
-                owner=self,
-            )
+            self._defer(at_tick, factory=lambda: self.__core_real.events.publish(event))
             return
         if not self.__core_real.events.has_subscribers(event_name):
             return
         await self.__core_real.events.publish(Event(event_name, data, source=self._metadata.name))
+
+    def hook(
+        self,
+        name: str,
+        *args: Any,
+        at_tick: int | None = None,
+        firstresult: bool = False,
+        **kwargs: Any,
+    ) -> Any:
+        """Execute hooks by name.
+
+        Args:
+            name: Hook name.
+            *args: Positional arguments passed to hook implementations.
+            at_tick: If provided, defer execution until this tick number.
+                     Must be > core.tick at call time. Raises ValueError if
+                     in the past. Returns None (fire-and-forget).
+            firstresult: If True, return the first non-None result immediately.
+            **kwargs: Keyword arguments passed to hook implementations.
+
+        Returns:
+            Hook results (list, or first non-None when ``firstresult=True``),
+            or ``None`` when ``at_tick`` is set (deferred; result unavailable).
+
+        Raises:
+            ValueError: If ``at_tick <= core.tick``.
+        """
+        if at_tick is not None:
+            self._defer(
+                at_tick,
+                factory=lambda: self.__core_real.hooks.execute(
+                    name,
+                    *args,
+                    firstresult=firstresult,
+                    plugin_id=str(self._metadata.id),
+                    **kwargs,
+                ),
+            )
+            return None
+        return self.__core_real.hooks.execute(
+            name,
+            *args,
+            firstresult=firstresult,
+            plugin_id=str(self._metadata.id),
+            **kwargs,
+        )
 
     def has_subscribers(self, event_name: str) -> bool:
         """True if someone is listening for event_name (mute-aware).

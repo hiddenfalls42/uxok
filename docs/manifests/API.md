@@ -274,7 +274,7 @@ to `snake_case` and strips common plugin-suffix words (e.g. `DataProcessor` → 
 | `has_subscribers` | `def has_subscribers(self, event_name: str) -> bool` | `bool` | — |
 | `subscribe` | `async def subscribe(self, event_pattern: str, handler: Callable) -> None` | `None` | — |
 | `register_hook` | `async def register_hook(self, hook_name: str, handler: Callable, *, priority: int = 0) -> None` | `None` | — |
-| `hook` | `hook(name: str, *args, at_tick: int \| None = None, firstresult: bool = False, **kwargs) -> Any` (instance attribute, not a `def`) | list of results, or first non-`None` when `firstresult=True`; `None` when `at_tick` is set (deferred, fire-and-forget) | `ValueError` if `at_tick <= core.tick` |
+| `hook` | `def hook(self, name: str, *args, at_tick: int \| None = None, firstresult: bool = False, **kwargs) -> Any` | list of results, or first non-`None` when `firstresult=True`; `None` when `at_tick` is set (deferred, fire-and-forget) | `ValueError` if `at_tick <= core.tick` |
 | `config` | `def config(self, key: str, default: Any = None) -> Any` | `Any` | — |
 | `get_capability` | `async def get_capability(self, capability: str \| type, *, tag: str \| None = None) -> Any` | `Any` / typed `_T` (two `@overload`s) | `CapabilityError`; `CapabilityAccessError` under `capability_access="declared"`/`"sealed"` if not in the runtime grant `requires ∪ resolves` |
 | `get_state` | `async def get_state(self) -> dict` | `dict` (default `{}`) | — |
@@ -300,11 +300,10 @@ Notes:
   payload construction: ``if self.has_subscribers(name): await self.emit(name, build())``.
   `mute`/`unmute` remain host-only on `core.events`; `has_subscribers` is surfaced here
   so plugin authors do not need to reach through `core.events` for the common guard case.
-- `hook` is an instance attribute assigned a closure in `__init__`, not a class-level
-  `def`. When `at_tick` is `None`, it executes immediately and returns results (list, or
-  first non-`None` when `firstresult=True`). When `at_tick` is set, execution is deferred
-  to that tick and `None` is returned (fire-and-forget); raises `ValueError` if
-  `at_tick <= core.tick`.
+- `hook` is a class-level method. When `at_tick` is `None`, it executes immediately and
+  returns results (list, or first non-`None` when `firstresult=True`). When `at_tick` is
+  set, execution is deferred to that tick and `None` is returned (fire-and-forget); raises
+  `ValueError` if `at_tick <= core.tick`. Internally shares a `_defer` helper with `emit`.
 - There is no recurring-execution primitive. Periodic work is built by self-rescheduling:
   a handler re-arms itself with `emit(at_tick=core.tick + N)` or
   `hook(name, at_tick=core.tick + N)`.
@@ -1145,6 +1144,7 @@ in step 6 is signalled but does not roll back.
 | `Registry.block` / `unblock` / `is_blocked` | **Removed** | No kernel-level plugin blocklist; hosts enforce admission policy before calling `register_plugin()` |
 | `@handle_errors(...)` / `from uxok.plugin import handle_errors` | **Removed** | Use `try/except` + `self._emit_plugin_error(source, error, **extra)` in `Plugin` subclasses; supervision policy belongs in plugin code |
 | `Plugin.config()` fallthrough to `CoreConfig` | **Removed** | Lookup stops at the `default` argument; reach `CoreConfig` explicitly via `self.core.config.<field>` if needed |
+| `Plugin.hook` as instance attribute (closure) | **Changed to class method** | `Plugin.hook` is now a regular `def hook(self, ...)` class method; call signature is identical |
 
 Zero backward compatibility on all removed names. `on` is completely gone; code
 using `@on(...)` or `from uxok import on` raises `ImportError`. `CoreConfig`

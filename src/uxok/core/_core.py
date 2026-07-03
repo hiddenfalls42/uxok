@@ -9,12 +9,7 @@ from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
 from uxok.core._capability_system import CapabilityPolicy, CapabilitySystem
-from uxok.core._shared_utils import (
-    drain_plugin_resources,
-    format_plugin_error,
-    log_op,
-    resolve_plugin,
-)
+from uxok.core._shared_utils import drain_plugin_resources
 from uxok.core._state_manager import StateManager
 from uxok.errors import CapabilityError, CoreError, PluginError
 from uxok.events._bus import _EventBus
@@ -32,8 +27,10 @@ from uxok.protocols._types import PluginId
 from uxok.protocols.events import EventBus
 from uxok.protocols.hooks import HookSystem
 from uxok.protocols.registry import Registry
+from uxok.registry._resolve import resolve_plugin
 from uxok.timing._clock import TickClock
 from uxok.timing._scheduler import TickScheduler
+from uxok.utils import format_plugin_error, log_op
 
 if TYPE_CHECKING:
     from uxok.registry._plugin_view import PluginCollection

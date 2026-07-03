@@ -3,16 +3,14 @@ import logging
 
 import pytest
 
-from uxok.core._shared_utils import (
-    drain_plugin_resources,
-    format_capability_error,
-    format_plugin_error,
-    log_op,
-    resolve_plugin,
-)
+from uxok.core._shared_utils import drain_plugin_resources
+from uxok.registry._resolve import resolve_plugin
 from uxok.utils import (
     AsyncTaskManager,
+    format_capability_error,
+    format_plugin_error,
     log_context,
+    log_op,
     safe_str,
     sanitize_identifier,
     validate_enum_value,

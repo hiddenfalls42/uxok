@@ -8,6 +8,11 @@ from ._capability_utils import (
     get_protocol_methods,
     normalize_capability_set,
 )
+from ._formatting import (
+    format_capability_error,
+    format_plugin_error,
+    log_op,
+)
 from ._helpers import (
     AsyncTaskManager,
     camel_to_snake,
@@ -25,9 +30,12 @@ __all__ = [
     "_AsyncSafeSet",
     "camel_to_snake",
     "derive_capability_name",
+    "format_capability_error",
+    "format_plugin_error",
     "get_instance_methods",
     "get_protocol_methods",
     "log_context",
+    "log_op",
     "normalize_capability_set",
     "safe_str",
     "sanitize_identifier",

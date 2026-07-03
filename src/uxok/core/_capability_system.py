@@ -7,13 +7,9 @@ from dataclasses import dataclass
 from functools import cache
 from typing import TYPE_CHECKING, Any
 
-from uxok.core._shared_utils import (
-    format_capability_error,
-    log_op,
-)
 from uxok.errors import CapabilityAccessError, MissingCapabilityError, PluginError
 from uxok.registry._plugin_view import CapabilityInfo
-from uxok.utils import derive_capability_name, get_protocol_methods
+from uxok.utils import derive_capability_name, format_capability_error, get_protocol_methods, log_op
 from uxok.utils._capability_utils import signature_incompatibility
 
 if TYPE_CHECKING:

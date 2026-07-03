@@ -7,12 +7,10 @@ from uxok.core._shared_utils import drain_plugin_resources
 from uxok.registry._resolve import resolve_plugin
 from uxok.utils import (
     AsyncTaskManager,
-    format_capability_error,
     format_plugin_error,
     log_context,
     log_op,
     safe_str,
-    sanitize_identifier,
     validate_enum_value,
     validate_identifier,
     validate_positive_number,
@@ -36,7 +34,6 @@ async def test_async_task_manager_cancel_all():
 
 def test_validation_helpers():
     assert validate_identifier("foo-bar", "field") == "foo-bar"
-    assert sanitize_identifier("foo bar", "field") == "foo_bar"
     with pytest.raises(ValueError):
         validate_identifier("   ", "field")
     with pytest.raises(ValueError):
@@ -108,20 +105,6 @@ def test_validate_positive_number_accepts_good_values():
     validate_positive_number(1000, "test")
 
 
-def test_sanitize_identifier_strips_and_cleans():
-    assert sanitize_identifier("  hello-world  ", "field") == "hello-world"
-    assert sanitize_identifier("has spaces!", "field") == "has_spaces_"
-
-
-def test_sanitize_identifier_rejects_empty():
-    with pytest.raises(ValueError):
-        sanitize_identifier("   ", "field")
-
-
-def test_sanitize_identifier_special_chars_become_underscores():
-    assert sanitize_identifier("!@#$", "field") == "____"
-
-
 def test_validate_identifier_bad_chars():
     with pytest.raises(ValueError, match="must contain only"):
         validate_identifier("hello world", "field")
@@ -149,13 +132,6 @@ def test_log_op():
     result = log_op("test_op", foo="bar")
     assert result["operation"] == "test_op"
     assert result["foo"] == "bar"
-
-
-def test_format_capability_error():
-    msg = format_capability_error("storage", ["cache", "db"])
-    assert "storage" in msg
-    assert "cache" in msg
-    assert "db" in msg
 
 
 def test_format_plugin_error():

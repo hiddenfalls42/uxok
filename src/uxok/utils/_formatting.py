@@ -15,14 +15,6 @@ def log_op(operation: str, **kwargs: Any) -> dict[str, Any]:
     return log_context(operation=operation, **kwargs)
 
 
-def format_capability_error(capability: str | list[str], available: list[str] | None = None) -> str:
-    """Consistent capability error formatting."""
-    missing = ", ".join(sorted(capability)) if isinstance(capability, list) else capability
-    if available:
-        return f"Capability '{missing}' not available. Available: {', '.join(sorted(available))}"
-    return f"Capability '{missing}' not available."
-
-
 def format_plugin_error(
     plugin_id: str,
     reason: str,

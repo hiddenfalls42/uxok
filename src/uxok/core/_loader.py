@@ -66,7 +66,7 @@ def materialize_plugin(code: str, origin: str | None = None) -> type[Plugin]:
         pkg_registered = True
 
     try:
-        exec(compile(code, origin or "<orion_plugin>", "exec"), module.__dict__)  # noqa: S102
+        exec(compile(code, origin or "<uxok_plugin>", "exec"), module.__dict__)  # noqa: S102
     except Exception as e:
         raise PluginError(f"Failed to compile plugin code: {e}") from e
     finally:

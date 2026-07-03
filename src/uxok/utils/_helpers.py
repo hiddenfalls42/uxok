@@ -49,18 +49,6 @@ def validate_enum_value(value: str, valid_values: Iterable[str], field_name: str
     return value
 
 
-def sanitize_identifier(value: str, field_name: str) -> str:
-    """Sanitize a user-provided identifier by trimming and normalizing."""
-    if not isinstance(value, str):
-        raise ValueError(f"{field_name} must be a string")
-    trimmed = value.strip()
-    # Replace any disallowed character with underscore
-    sanitized = re.sub(r"[^A-Za-z0-9_.-]", "_", trimmed)
-    if not sanitized:
-        raise ValueError(f"{field_name} cannot be empty after sanitization")
-    return sanitized
-
-
 def camel_to_snake(name: str) -> str:
     """Convert CamelCase to snake_case (handles acronyms correctly).
 

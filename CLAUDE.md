@@ -68,7 +68,7 @@ The core provides **ONLY** these six primitives — everything else is a plugin:
 
 ```
 src/uxok/            THE KERNEL (nothing else is)
-├── core/            orchestrator, capability system, state manager
+├── core/            orchestrator, capability system, state manager, loader, hot-reload
 ├── events/          event bus + subscription manager
 ├── hooks/           hook system + cache
 ├── plugin/          plugin base class, decorators, config fields

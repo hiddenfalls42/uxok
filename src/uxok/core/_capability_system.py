@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any
 from uxok._config_validation import CAPABILITY_COLLISION_POLICIES
 from uxok.errors import CapabilityAccessError, CapabilityError, MissingCapabilityError, PluginError
 from uxok.registry._plugin_view import CapabilityInfo
-from uxok.utils import derive_capability_name, format_capability_error, get_protocol_methods, log_op
+from uxok.utils import derive_capability_name, get_protocol_methods, log_op
 from uxok.utils._capability_utils import signature_incompatibility
 
 if TYPE_CHECKING:
@@ -94,8 +94,10 @@ class CapabilitySystem:
 
     def _collision_error(self, capability: str, providers: list[Any]) -> PluginError:
         """Build a consistent collision PluginError for a capability."""
+        names = ", ".join(sorted(p.metadata.name for p in providers))
         return PluginError(
-            format_capability_error(capability, [p.metadata.name for p in providers])
+            f"Capability '{capability}' is already provided by: {names} "
+            f"(capability_collision='error_on_conflict')"
         )
 
     def _protocol_contract_violation(self, plugin: Any, protocol: type) -> str | None:

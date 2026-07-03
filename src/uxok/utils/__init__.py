@@ -9,7 +9,6 @@ from ._capability_utils import (
 )
 from ._formatting import (
     build_plugin_error_event,
-    format_capability_error,
     format_plugin_error,
     log_op,
 )
@@ -18,7 +17,6 @@ from ._helpers import (
     camel_to_snake,
     log_context,
     safe_str,
-    sanitize_identifier,
     validate_enum_value,
     validate_identifier,
     validate_positive_number,
@@ -29,14 +27,12 @@ __all__ = [
     "build_plugin_error_event",
     "camel_to_snake",
     "derive_capability_name",
-    "format_capability_error",
     "format_plugin_error",
     "get_protocol_methods",
     "log_context",
     "log_op",
     "normalize_capability_set",
     "safe_str",
-    "sanitize_identifier",
     "validate_enum_value",
     "validate_identifier",
     "validate_positive_number",

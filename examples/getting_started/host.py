@@ -1,18 +1,8 @@
-"""host.py — a tiny hot-loader that composes the conversation and runs it.
+"""host.py — a tiny hot-loader: it loads the two plugins from source and runs them.
 
-A *host* boots a :class:`~uxok.Core` and brings plugins up on it. Rather than
-importing the plugin classes, this host reads each plugin's *source* and hands it
-to :meth:`~uxok.Core.load_plugin`; the kernel compiles, registers, and starts it.
-That is uxok's "downloaded policy" — the kernel runs plugin code it never compiled
-against, so the host binds to nothing but file paths and a load order, not to the
-plugin classes themselves.
-
-``build_host`` is shared by ``main`` and the test suite, so the running program
-and the tested program never drift.
-
-Run it:
-
-    python -m examples.getting_started.host
+Rather than importing the plugin classes, it hands each plugin's source to
+``core.load_plugin`` and lets them coordinate by capability and event. Run it with
+``python -m examples.getting_started.host``.
 """
 
 from __future__ import annotations
@@ -30,11 +20,7 @@ _HERE = Path(__file__).resolve().parent
 
 
 async def build_host(core: Core) -> None:
-    """Load the plugins from source, provider before requirer.
-
-    ``model`` (provides ``llm``) must come up before ``agent`` (requires it) — the
-    kernel checks ``requires`` at load time and would reject the agent otherwise.
-    """
+    """Load the plugins from source — provider (``model``) before requirer (``agent``)."""
     for name in ("model", "agent"):
         path = _HERE / f"{name}.py"
         await core.load_plugin(path.read_text(), origin=str(path))

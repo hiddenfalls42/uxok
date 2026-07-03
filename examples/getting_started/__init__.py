@@ -1,13 +1,7 @@
 """Getting-started example: the README quick-start as a proper modular host.
 
-The same two-plugin conversation as the README, but each plugin lives in its own
-module and a ``host`` module composes them — the structure a real uxok project
-uses. The plugins import only the kernel, never each other; the host imports
-neither plugin class — it hot-loads both from source with ``core.load_plugin`` and
-lets them coordinate by capability and event, then runs to completion.
-
-This is the minimal counterpart to ``example_host/``: two plugins, a persona hook
-carried on the model, and a clean self-terminating run. Run it with
+Two plugins, each in its own module, composed by a ``host`` that hot-loads both
+from source — the minimal counterpart to ``example_host/``. Run it with
 ``python -m examples.getting_started.host``; ``tests/test_getting_started.py`` is
 its acceptance suite.
 """

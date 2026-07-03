@@ -1,10 +1,4 @@
-"""Model — a plugin that provides the ``llm`` capability and the ``persona`` hook.
-
-Stands in for an inference backend. It *provides* the ``llm`` capability; any
-plugin that declares ``requires={"llm"}`` calls :meth:`reply` through the
-capability surface without ever importing this class. The ``persona`` hook lets
-any plugin ask "what voice should replies use?" without knowing who answers.
-"""
+"""Model — a plugin that provides the ``llm`` capability and the ``persona`` hook."""
 
 from __future__ import annotations
 

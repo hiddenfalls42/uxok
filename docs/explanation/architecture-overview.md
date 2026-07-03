@@ -1,6 +1,6 @@
 # Architecture overview
 
-uxok is a hot-loading plugin microkernel for Python. It provides exactly five primitives — event bus, hook system, plugin registry, capability system, and plugin base class — and nothing else. Every feature a real application needs is a plugin built on those primitives.
+uxok is a hot-loading plugin microkernel for Python. It provides exactly six primitives — event bus, hook system, plugin registry, capability system, plugin base class, and the timing system — and nothing else. Every feature a real application needs is a plugin built on those primitives.
 
 ## Why a kernel, not a framework
 
@@ -16,7 +16,7 @@ This is not an aesthetic preference. It is a structural guarantee: the kernel su
 
 Both, on different axes. The two models answer different questions, and uxok takes its answer from each.
 
-A **microkernel** is a claim about structure: shrink the core to the primitives every service needs, and run everything else as separate services that talk over a message channel. uxok is a microkernel in exactly this sense. The five primitives are the core, every feature is a plugin, and the event bus is the channel between them. When uxok is called a microkernel, this is the accurate part.
+A **microkernel** is a claim about structure: shrink the core to the primitives every service needs, and run everything else as separate services that talk over a message channel. uxok is a microkernel in exactly this sense. The six primitives are the core, every feature is a plugin, and the event bus is the channel between them. When uxok is called a microkernel, this is the accurate part.
 
 An **exokernel** is a claim about resource discipline: provide *mechanism, not policy*, hand out resources through secure bindings that authorize once and cost little to use, and push the abstractions up into replaceable code above the kernel. uxok inherits this half directly. Capabilities are secure bindings — see [capability system](capability-system.md) — supervision and retry policy live in plugins rather than the core, and the kernel holds no opinion about what a plugin should be. The project takes its name from this side of the family.
 
@@ -24,7 +24,7 @@ Protection is where the exokernel analogy stops. A hardware exokernel multiplexe
 
 Microkernel by structure, exokernel by binding discipline, single trust domain by design.
 
-## The five primitives
+## The six primitives
 
 **Event bus.** The publish-subscribe channel between plugins. One plugin emits an event by name; every subscriber for that name receives it. Dispatch is concurrent — each subscriber runs as an independent async task and the emitter returns immediately. Events carry an immutable payload and a `source` field stamped with the emitting plugin's name, so subscribers can identify the origin without encoding it in the topic name.
 
@@ -35,6 +35,8 @@ Microkernel by structure, exokernel by binding discipline, single trust domain b
 **Capability system.** The typed dependency mechanism. A plugin declares what it `provides` and what it `requires`. Before a plugin starts, the kernel verifies every required capability is already provided by a running plugin and records the provider as a dependency. This transforms capability declarations into real dependency edges, which the registry enforces at shutdown. A plugin can also provide a Protocol type instead of a plain string; the kernel then validates the provider's method signatures against the protocol at registration time.
 
 **Plugin base class.** The developer-experience layer. It handles name detection, metadata creation, decorator processing, config lookup, event emission, hook dispatch, and background task tracking. Plugin authors subclass it, declare their capabilities, and implement `on_start()` and `on_stop()`. The base class mediates all interaction with the kernel so authors rarely need to touch `Core` directly.
+
+**Timing system.** The monotonic tick clock that drives all scheduling. `TickClock` runs at a fixed rate — 1000 Hz by default — and exposes the current counter as `core.tick`. Every event the bus dispatches is stamped with the tick number at dispatch, giving subscribers a common timeline without explicit coordination. `Plugin.emit()` and `Plugin.hook()` both accept `at_tick=N`, deferring the call until `TickScheduler` fires it at the named boundary. The catch-up policy after a stall — `"skip"` re-anchors to the current wall-clock boundary and fires missed deferred work once; `"burst"` replays each missed tick in order — is configurable in `CoreConfig` and is the one deliberate policy exception in an otherwise mechanism-only kernel.
 
 ## How capabilities replace direct coupling
 

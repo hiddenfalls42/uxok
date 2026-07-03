@@ -149,7 +149,7 @@ See [§7.3 CoreConfig](#73-coreconfig) for the accepted enum values and numeric 
 | `register_plugin` | `async def register_plugin(self, plugin: PluginProtocol) -> bool` | `True` if registered | `CoreError` if not RUNNING, else `PluginError`, `MissingCapabilityError` |
 | `check_plugin` | `async def check_plugin(self, candidate: PluginProtocol) -> AdmissionResult` | `AdmissionResult` (advisory; never raises) | — |
 | `unregister_plugin` | `async def unregister_plugin(self, plugin_id: UUID \| str, *, force: bool = False) -> bool` | `False` if not found | `PluginError` (active-operation or dependents present) |
-| `load_plugin` | `async def load_plugin(self, code: str, origin: str \| None = None) -> bool` | `True` if loaded or reloaded | `CoreError` if not RUNNING, else `PluginError` (compile failure or 0 or >1 Plugin subclass found) |
+| `load_plugin` | `async def load_plugin(self, code: str, origin: str \| None = None) -> bool` | `True` if loaded or reloaded | `CoreError` if not RUNNING, else `PluginError` (compile or module-execution failure, or 0 or >1 Plugin subclass found) |
 | `get_plugin` | `async def get_plugin(self, plugin_id: UUID \| str) -> PluginProtocol \| None` | live instance or `None` | — |
 | `list` | `async def list(self) -> PluginCollection` | `PluginCollection` — the single discovery surface (plugins **and** capabilities; see [§10](#10-plugincollection-and-pluginview)) | — |
 | `get_capability` | `async def get_capability(self, capability: str \| type, *, tag: str \| None = None) -> Any` | provider | `CapabilityError` if unavailable; `PluginError` if provider fails protocol contract |
@@ -282,7 +282,7 @@ to `snake_case` and strips common plugin-suffix words (e.g. `DataProcessor` → 
 | `create_background_task` | `async def create_background_task(self, coro: Coroutine[Any, Any, Any], name: str \| None = None) -> asyncio.Task` | `asyncio.Task` | — |
 | `on_start` | `async def on_start(self) -> None` | `None` (override hook; default no-op) | — |
 | `on_stop` | `async def on_stop(self) -> None` | `None` (override hook; default no-op) | — |
-| `start` | `async def start(self) -> None` | `None` | `RuntimeError` if started after shutdown; `PluginError` on config-schema validation failure |
+| `start` | `async def start(self) -> None` | `None` | `PluginError` if started after shutdown (instances are one-shot) or on config-schema validation failure |
 | `stop` | `async def stop(self) -> None` | `None` | — (isolates and logs errors) |
 
 Notes:
@@ -723,7 +723,7 @@ Constructors:
   plugin has been unregistered or torn down between the time the view was fetched and the
   time the read was attempted. EAFP callers must catch it. Inherits from `PluginError`.
 - `CapabilityError.__init__(self, capability: str | list[str] | None, available: list[str] | None = None, message: str | None = None)` — when `message` is given, it is used verbatim; otherwise the message is built from `capability` and (optionally) `available` as suggestions.
-- `MissingCapabilityError.__init__(self, missing: list[str], phase: str = "register", available: list[str] | None = None)` — sets `self.missing: list[str]` and `self.phase: str`; delegates to `CapabilityError`.
+- `MissingCapabilityError.__init__(self, missing: list[str], phase: str = "register", available: list[str] | None = None, requirer: str | None = None)` — sets `self.missing: list[str]`, `self.phase: str`, and `self.requirer: str | None` (the name of the plugin whose `requires` failed, when known); delegates to `CapabilityError`.
 - `CapabilityAccessError.__init__(self, capability: str, plugin_name: str, declared: list[str] | None = None)` — sets `self.capability: str` and `self.plugin_name: str`; delegates to `CapabilityError`. The `declared` argument carries the caller's full runtime grant (`requires ∪ resolves`) for the message. Raised by `Plugin.get_capability` / the `CoreFacet` when, under `capability_access="declared"`/`"sealed"`, a plugin resolves a capability outside its runtime grant and without the `kernel.dispatch` grant (RFC 0001 §3.2, RFC 0002 §3.2).
 
 ---

@@ -110,7 +110,7 @@ class TestRegistration:
     @pytest.mark.asyncio
     async def test_register_non_callable_raises_value_error(self, hs):
         """Passing a non-callable as callback must be rejected at registration."""
-        with pytest.raises(ValueError, match="Hook must be callable"):
+        with pytest.raises(ValueError, match="handler must be callable"):
             await hs.register("my.hook", "not-a-function")  # type: ignore[arg-type]
 
     @pytest.mark.asyncio

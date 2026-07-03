@@ -16,6 +16,8 @@ This is not an aesthetic preference. It is a structural guarantee: the kernel su
 
 Both, on different axes. The two models answer different questions, and uxok takes its answer from each.
 
+The kernel was designed with a mashup of concepts and the name `uxok` spells that hybrid in miniature: `u` for micro, `xo` for exo and `k` for kernel, referencing the three borrowed architectures. By structure uxok is a microkernel, but its capability system follows the MIT exokernel `xok`'s discipline — *mechanism, not policy*, resources reached through secure bindings, abstraction pushed out into plugins. It **stops short of the exokernel's hardware protection**: plugins share one process and one trust domain. 
+
 A **microkernel** is a claim about structure: shrink the core to the primitives every service needs, and run everything else as separate services that talk over a message channel. uxok is a microkernel in exactly this sense. The five primitives are the core, every feature is a plugin, and the event bus is the channel between them. When uxok is called a microkernel, this is the accurate part.
 
 An **exokernel** is a claim about resource discipline: provide *mechanism, not policy*, hand out resources through secure bindings that authorize once and cost little to use, and push the abstractions up into replaceable code above the kernel. uxok inherits this half directly. Capabilities are secure bindings — see [capability system](capability-system.md) — supervision and retry policy live in plugins rather than the core, and the kernel holds no opinion about what a plugin should be. The project takes its name from this side of the family.

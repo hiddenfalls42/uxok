@@ -6,7 +6,7 @@ import asyncio
 
 import pytest
 
-from uxok import Core, Plugin
+from uxok import Core, Plugin, PluginError
 from uxok.plugin._decorators import hook
 from uxok.protocols import Event
 
@@ -28,7 +28,7 @@ class TestPluginLifecycle:
         p = Plugin(name="shutdown_test")
         p._initialized = False
         p._shutdown = True
-        with pytest.raises(RuntimeError, match="Cannot start plugin after shutdown"):
+        with pytest.raises(PluginError, match="already stopped; plugin instances are one-shot"):
             await p.start()
 
     @pytest.mark.asyncio

@@ -361,7 +361,7 @@ class TestHookSystemRegisterDirect:
         core = clean_core
         await core.start()
 
-        with pytest.raises(ValueError, match="Hook must be callable"):
+        with pytest.raises(ValueError, match="handler must be callable"):
             await core.hooks.register("ok.name", "not-callable")  # type: ignore[arg-type]
 
         await core.stop()

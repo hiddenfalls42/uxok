@@ -28,7 +28,10 @@ def validate_plugin_name(name: str) -> None:
     Raises:
         ValueError: If name is invalid
     """
-    validated = validate_identifier(name, "PluginProtocol name")
-    sanitized = sanitize_identifier(validated, "PluginProtocol name")
+    validated = validate_identifier(name, "Plugin name")
+    sanitized = sanitize_identifier(validated, "Plugin name")
     if not re.match(r"^[a-z][a-z0-9_]*$", sanitized):
-        raise ValueError(f"PluginProtocol name must be snake_case (a-z, 0-9, _): got '{name}'")
+        raise ValueError(
+            f"Plugin name must be snake_case starting with a letter "
+            f"(a-z, then a-z/0-9/_): got '{name}'"
+        )

@@ -2,6 +2,10 @@
 
 <!-- One line per note added, updated, or removed. Format: YYYY-MM-DD | action | path — description -->
 
+2026-07-03 | updated | docs/how-to/how-to-use-capability-policies.md — collision example output tracks the fixed source message ("already provided by: storage_plugin_a …" — was the misleading "not available" wording, and the old comment also showed the class name where the runtime prints the snake_case plugin name)
+2026-07-03 | updated | docs/how-to/how-to-manage-plugin-dependencies.md — auditor H-1: §2 example now calls core.start() before register_plugin (raised CoreError as written)
+2026-07-03 | updated | docs/explanation/state-management.md — auditor M-2: core.plugin_error/core.hook_error are events, not hooks
+
 2026-06-30 | updated | docs/manifests/API.md — register_plugin/load_plugin raises: added CoreError if not RUNNING; added RUNNING-requirement note
 2026-06-30 | updated | docs/how-to/how-to-manage-core-lifecycle.md — removed the "Register a plugin before starting" section (auto-start removed); renumbered subsequent steps
 2026-06-30 | updated | docs/how-to/how-to-register-and-manage-plugins.md — removed auto-start claim; register example now calls core.start() before register_plugin

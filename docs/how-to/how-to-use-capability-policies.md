@@ -42,7 +42,9 @@ and raise `CapabilityError` when nothing is found.
     try:
         await core.register_plugin(StoragePluginB())
     except PluginError as exc:
-        print(exc)  # "Capability 'storage' not available. Available: StoragePluginA"
+        print(exc)
+        # "Capability 'storage' is already provided by: storage_plugin_a
+        #  (capability_collision policy is 'error_on_conflict')"
     ```
 
     `PluginError` is raised before `StoragePluginB` is added to the registry; the

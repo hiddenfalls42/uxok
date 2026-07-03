@@ -129,7 +129,10 @@ class _HookSystem:
 
         # Validate hook callable
         if not callable(callback):
-            raise ValueError("Hook must be callable")
+            owner_part = f" (from plugin {plugin_id})" if plugin_id else ""
+            raise ValueError(
+                f"Hook '{name}' handler must be callable, got {type(callback).__name__}{owner_part}"
+            )
 
         hook = Hook(
             name=name, callback=callback, priority=priority, plugin_id=plugin_id, owner=owner

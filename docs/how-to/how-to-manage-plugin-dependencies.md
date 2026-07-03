@@ -44,6 +44,7 @@ class DatabasePlugin(Plugin):
 
 async def main():
     core = Core()
+    await core.start()
 
     cache = CachePlugin()
     await core.register_plugin(cache)

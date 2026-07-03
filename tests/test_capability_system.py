@@ -309,3 +309,43 @@ class TestCapabilityCleanup:
         finally:
             if core.state.name == "RUNNING":
                 await core.stop()
+
+
+class TestErrorMessages:
+    """Error text names the actual condition — collision, tag mismatch, missing requirer."""
+
+    @pytest.mark.asyncio
+    async def test_collision_error_names_existing_provider(self):
+        """error_on_conflict rejection says the capability is ALREADY provided (not missing)."""
+        core = Core(capability_collision="error_on_conflict")
+        try:
+            await core.start()
+            first = MockCapabilityPlugin(name="provider1", provides={"shared_cap"})
+            await core.register_plugin(first)
+
+            second = MockCapabilityPlugin(name="provider2", provides={"shared_cap"})
+            with pytest.raises(PluginError, match="already provided by: provider1"):
+                await core.register_plugin(second)
+        finally:
+            if core.state.name == "RUNNING":
+                await core.stop()
+
+    @pytest.mark.asyncio
+    async def test_tag_mismatch_error_reports_tags(self, started_core: Core):
+        """A tag miss keeps the precise tag message, not the generic missing-capability one."""
+        provider = Plugin(name="tagged_provider", provides={"backend"}, tags={"local"})
+        await started_core.register_plugin(provider)
+
+        with pytest.raises(CapabilityError, match="has tag 'remote'") as exc_info:
+            await started_core.get_capability("backend", tag="remote")
+
+        message = str(exc_info.value)
+        assert "not available" not in message
+        assert "local" in message  # the tags that DO exist are listed
+
+    @pytest.mark.asyncio
+    async def test_missing_requirement_error_names_the_requirer(self, started_core: Core):
+        """The rejection says whose `requires` failed, not just which capability is absent."""
+        consumer = MockCapabilityPlugin(name="needy", requires={"absent_cap"})
+        with pytest.raises(CapabilityError, match="required by plugin 'needy'"):
+            await started_core.register_plugin(consumer)

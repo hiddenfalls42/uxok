@@ -85,7 +85,14 @@ class _Registry:
         # Check for name conflicts
         for existing_plugin in self._plugins.values():
             if existing_plugin.metadata.name == plugin_name:
-                raise PluginError(format_plugin_error(str(plugin_id), "name already in use"))
+                raise PluginError(
+                    format_plugin_error(
+                        str(plugin_id),
+                        f"name '{plugin_name}' already in use by plugin "
+                        f"{existing_plugin.metadata.id}; plugin names must be unique — "
+                        "pass name= to override the auto-derived class name",
+                    )
+                )
 
         # Enforce the plugin ceiling (insurance against runaway registration)
         if self._max_plugins is not None and len(self._plugins) >= self._max_plugins:
@@ -166,8 +173,9 @@ class _Registry:
                 dependent_names = [self._plugins[dep].metadata.name for dep in active_dependents]
                 raise PluginError(
                     format_plugin_error(
-                        str(plugin_id),
-                        f"dependents present -> {', '.join(dependent_names)}",
+                        f"'{self._plugins[plugin_id].metadata.name}' ({plugin_id})",
+                        f"dependents present -> {', '.join(dependent_names)}; "
+                        "unregister the dependents first or pass force=True",
                     )
                 )
 

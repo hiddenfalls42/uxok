@@ -122,13 +122,17 @@ class MissingCapabilityError(CapabilityError):
         missing: list[str],
         phase: str = "register",
         available: list[str] | None = None,
+        requirer: str | None = None,
     ) -> None:
         self.missing = missing
         self.phase = phase
+        self.requirer = requirer
         missing_list = ", ".join(sorted(missing))
+        requirer_part = f" (required by plugin '{requirer}')" if requirer else ""
         msg = (
-            f"No plugin provides required capability: {missing_list}\n"
-            "Develop Capability or remove dependency to enable plugin registration."
+            f"No registered plugin provides required capability: {missing_list}{requirer_part}\n"
+            "Register the providing plugin first (load order matters), or remove the "
+            "capability from the plugin's `requires`."
         )
         if phase:
             msg = f"{msg} (phase={phase})"

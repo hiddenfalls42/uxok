@@ -293,7 +293,13 @@ class Plugin(PluginProtocol):
             return
 
         if self._shutdown:
-            raise RuntimeError("Cannot start plugin after shutdown")
+            from uxok.errors import PluginError
+
+            raise PluginError(
+                f"Plugin '{self._metadata.name}' was already stopped; plugin instances "
+                "are one-shot — create a fresh instance to register again "
+                "(use get_state()/restore_state() for state continuity)"
+            )
 
         await self._register_handlers()
 

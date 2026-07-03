@@ -330,7 +330,11 @@ class Core(CoreProtocol):
             self._capability_system.raise_admission_error(plugin, admission)
 
         if not await self._active_operations.add(plugin_id):
-            raise PluginError(f"Plugin {plugin_id} already has an active operation")
+            raise PluginError(
+                f"Plugin '{plugin.metadata.name}' ({plugin_id}) already has an active "
+                "operation — another register/unregister/reload is in progress; "
+                "retry after it completes"
+            )
 
         added_to_registry = False
         try:
@@ -579,7 +583,11 @@ class Core(CoreProtocol):
         plugin_name = plugin.metadata.name
 
         if not await self._active_operations.add(real_id):
-            raise PluginError(f"Plugin {real_id} already has an active operation")
+            raise PluginError(
+                f"Plugin '{plugin_name}' ({real_id}) already has an active "
+                "operation — another register/unregister/reload is in progress; "
+                "retry after it completes"
+            )
 
         if not force:
             dependents = await self._registry.dependents(real_id)
@@ -593,8 +601,9 @@ class Core(CoreProtocol):
                 await self._active_operations.remove(real_id)
                 raise PluginError(
                     format_plugin_error(
-                        str(real_id),
-                        f"dependents present -> {', '.join(names)}",
+                        f"'{plugin_name}' ({real_id})",
+                        f"dependents present -> {', '.join(names)}; "
+                        "unregister the dependents first or pass force=True",
                     )
                 )
 
@@ -672,7 +681,11 @@ class Core(CoreProtocol):
         plugin_id = old_plugin.metadata.id
 
         if not await self._active_operations.add(plugin_id):
-            raise PluginError(f"Plugin {plugin_id} already has an active operation")
+            raise PluginError(
+                f"Plugin '{old_plugin.metadata.name}' ({plugin_id}) already has an active "
+                "operation — another register/unregister/reload is in progress; "
+                "retry after it completes"
+            )
         try:
             await self._swap_plugin(old_plugin, new_plugin)
         finally:
@@ -888,13 +901,18 @@ class Core(CoreProtocol):
             return LifecycleFacet(self)
         try:
             return await self._capability_system.get_capability(capability, tag=tag)
-        except KeyError:
+        except KeyError as exc:
             from uxok.utils import derive_capability_name
 
             cap_name = (
                 derive_capability_name(capability) if isinstance(capability, type) else capability
             )
             available = await self._capability_system.list_capabilities()
+            if cap_name in available:
+                # The capability exists — the KeyError carries the precise reason
+                # (a tag mismatch), which the generic "not available" wording
+                # would contradict. Keep it.
+                raise CapabilityError(cap_name, message=str(exc.args[0])) from None
             raise CapabilityError(cap_name, available) from None
 
     # ========== Lifecycle ==========

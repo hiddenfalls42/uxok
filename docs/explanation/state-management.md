@@ -8,7 +8,7 @@ A plugin framework must answer two questions precisely: when is it safe for a pl
 
 The state machine makes the answers explicit. Each state carries a defined contract: what operations the core accepts, what subsystems are active, and what plugins may do. Transitions enforce those contracts at the boundary, not inside the operation. The result is that plugin code can trust the framework's promises without defensive checks.
 
-There is no `ERROR` state. Plugin-level failures are signals — the `core.plugin_error` and `core.hook_error` hooks — not state changes. Supervision policy lives in plugins, not the kernel. `FAILED` is reached only when the teardown sequence itself faults, which is a distinct and rare condition.
+There is no `ERROR` state. Plugin-level failures are signals — the `core.plugin_error` and `core.hook_error` events — not state changes. Supervision policy lives in plugins, not the kernel. `FAILED` is reached only when the teardown sequence itself faults, which is a distinct and rare condition.
 
 ## The five states
 

@@ -59,7 +59,7 @@ class TestRegistryAddRemove:
         p1 = Plugin(name="same_name")
         p2 = Plugin(name="same_name")
         await registry.add(p1)
-        with pytest.raises(PluginError, match="name already in use"):
+        with pytest.raises(PluginError, match="already in use by plugin"):
             await registry.add(p2)
 
     @pytest.mark.asyncio

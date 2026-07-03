@@ -101,8 +101,10 @@ class CapabilitySystem:
 
     def _collision_error(self, capability: str, providers: list[Any]) -> PluginError:
         """Build a consistent collision PluginError for a capability."""
+        names = ", ".join(sorted(p.metadata.name for p in providers))
         return PluginError(
-            format_capability_error(capability, [p.metadata.name for p in providers])
+            f"Capability '{capability}' is already provided by: {names} "
+            f"(capability_collision policy is 'error_on_conflict')"
         )
 
     def _protocol_contract_violation(self, plugin: Any, protocol: type) -> str | None:
@@ -187,7 +189,8 @@ class CapabilitySystem:
             policy = self._policy.capability_missing
             if policy == "return_none":
                 return None
-            raise KeyError(format_capability_error(capability, None))
+            available = sorted(name for name, plugins in self._capabilities.items() if plugins)
+            raise KeyError(format_capability_error(capability, available))
 
         providers = self._capabilities[capability]
 
@@ -243,9 +246,12 @@ class CapabilitySystem:
         single ``isinstance`` — no await, lock-free invariant (decision #12) holds.
         """
         if isinstance(value, _leak_types()):
+            # No plugin identity is reachable at this seam, so plugin_name stays
+            # empty rather than lying with the leaked type's name; the type is
+            # in the message.
             raise CapabilityAccessError(
                 capability or "<sealed capability>",
-                type(value).__name__,
+                "",
                 message=(
                     f"Sealed capability {f'{capability!r} ' if capability else ''}returned a "
                     f"live authority handle ({type(value).__name__}) from a provider method. "
@@ -320,7 +326,12 @@ class CapabilitySystem:
         (missing → contract → collision). The caller handles ``id_conflict``.
         """
         if admission.missing_requires:
-            raise MissingCapabilityError(sorted(admission.missing_requires), phase="register")
+            raise MissingCapabilityError(
+                sorted(admission.missing_requires),
+                phase="register",
+                available=sorted(self._capabilities),
+                requirer=plugin.metadata.name,
+            )
         if admission.contract_failures:
             cap = sorted(admission.contract_failures)[0]
             protocol = plugin._capability_protocols[cap]
@@ -345,7 +356,12 @@ class CapabilitySystem:
         """
         missing = self.missing_requirements(plugin)
         if missing:
-            raise MissingCapabilityError(sorted(missing), phase="register")
+            raise MissingCapabilityError(
+                sorted(missing),
+                phase="register",
+                available=sorted(self._capabilities),
+                requirer=plugin.metadata.name,
+            )
 
         capability_dependencies: set[PluginId] = set()
         requires = getattr(plugin.metadata, "requires", None)

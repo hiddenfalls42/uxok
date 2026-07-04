@@ -7,6 +7,9 @@
 2026-07-04 | updated | docs/how-to/index.md — boot-a-plugin-graph blurb names both core.load_plugins() and core.try_load_plugins()
 2026-07-04 | updated | docs/tutorials/getting-started.md — RFC 0010: cross-link to the best-effort try_load_plugins sibling from the load_plugins passage
 2026-07-04 | updated | examples/example_host/ — RFC 0010: build_host_best_effort demonstrates core.try_load_plugins as a foil to the all-or-nothing build_host; note-on-examples + package docstring track it
+2026-07-04 | updated | src/uxok/protocols/core.py — audit-2026-07-04-001 M-001/L-002: load_plugin protocol signature/docstring gains origin (was silently dropped since RFC 0008's reconciliation pass); protocol gains get_plugin, start, stop, slip to match the documented Core surface and kernel.lifecycle grant
+2026-07-04 | updated | docs/how-to/how-to-use-hot-reload.md — audit-2026-07-04-001 M-002: reload trigger corrected from "class name" to "plugin name (metadata.name)"
+2026-07-04 | updated | docs/manifests/API.md — audit-2026-07-04-001 L-001: refreshed three stale source-line anchors (_core.py Core class and CoreConfig(**kwargs) call, _base.py Plugin class) after the RFC 0008/0010 line-count shift
 
 2026-07-03 | updated | docs/tutorials/getting-started.md — Next steps: example_host description tracks its RFC 0009 final form (stateful persona, config-selected models, watcher, supervisor); "destination this starter grows into" framing for the tutorial series
 2026-07-03 | updated | docs/how-to/how-to-boot-a-plugin-graph-in-order.md — review F-3/F-4: BatchLoadError paragraph reconciled with the hardened plan phase (full pre-commit fault list, failed=None only for the three graph-wide faults, sources[N] sentinel); dead ../reference/ link repointed at docs/manifests/API.md

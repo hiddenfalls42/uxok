@@ -41,6 +41,13 @@ commit as its CHANGELOG entry.
   rollback-or-keep policy. `docs/manifests/API.md` §2.2 and §8 updated in this commit.
 
 ### Changed
+- `uxok.protocols.Core` (the public `Core` Protocol): `load_plugin` now declares the
+  `origin` parameter it was missing since `origin` was added to the concrete
+  `Core.load_plugin` (a gap the `load_plugins`/`try_load_plugins` reconciliation pass
+  did not catch); the protocol also gains `get_plugin`, `start`, `stop`, and the `slip`
+  property, which were on the concrete `Core` and in `API.md` but absent from the
+  Protocol. No behavior change — the concrete `Core` already satisfied the wider
+  surface; this only closes the reference/typing gap between the two.
 - Documentation: `docs/manifests/API.md` §8 and `errors.py`'s module docstring now state the
   stdlib-vs-custom-exception rule explicitly — local, immediate input validation (bad
   argument shape, unknown hook/enum name, missing attribute) raises the matching stdlib

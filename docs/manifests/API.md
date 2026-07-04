@@ -113,7 +113,7 @@ code never writes `CoreConfig`; only reflective field introspection imports it.
 
 ## 2. Core
 
-`class Core(CoreProtocol)` — `src/uxok/core/_core.py:51`.
+`class Core(CoreProtocol)` — `src/uxok/core/_core.py:144`.
 Re-exported at `uxok.core.Core` and `uxok.Core`.
 
 ### 2.1 Constructor
@@ -123,7 +123,7 @@ def __init__(self, **kwargs: Any) -> None
 ```
 
 `Core` takes `**kwargs` only. There are no explicit positional or keyword parameters.
-kwargs are forwarded verbatim to `CoreConfig(**kwargs)` (`_core.py:87`); validation
+kwargs are forwarded verbatim to `CoreConfig(**kwargs)` (`_core.py:170`); validation
 happens in `CoreConfig.__post_init__`. Any kwarg not a `CoreConfig` field raises
 `TypeError` from the dataclass. Accepted kwargs are exactly the `CoreConfig` fields:
 
@@ -220,7 +220,7 @@ Notes:
 
 ## 3. Plugin
 
-`class Plugin(PluginProtocol)` — `src/uxok/plugin/_base.py:27`.
+`class Plugin(PluginProtocol)` — `src/uxok/plugin/_base.py:32`.
 Exported from `uxok.plugin` and top-level `uxok`.
 
 ### 3.1 Constructor

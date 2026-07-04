@@ -121,6 +121,27 @@ class Core(Protocol):
     """
 
     # State Management
+    async def start(self) -> None:
+        """Start the core system.
+
+        Transitions from INITIALIZED to RUNNING.
+
+        Raises:
+            CoreError: If not in INITIALIZED state
+        """
+        ...
+
+    async def stop(self) -> None:
+        """Stop the core: full teardown leaving an empty, reusable core.
+
+        Plugins are unregistered in reverse dependency order (dependents before
+        dependencies). After stop() the registry is empty; core.start() works
+        again with a fresh plugin graph supplied by the caller.
+
+        Raises:
+            CoreError: If not in a stoppable state
+        """
+        ...
 
     # PluginProtocol Management
     async def register_plugin(self, plugin: PluginProtocol) -> bool:
@@ -156,7 +177,7 @@ class Core(Protocol):
         """
         ...
 
-    async def load_plugin(self, code: str) -> bool:
+    async def load_plugin(self, code: str, origin: str | None = None) -> bool:
         """Load or reload a plugin from a code string.
 
         Accepts plugin source code from any origin — file, network, database,
@@ -173,11 +194,16 @@ class Core(Protocol):
 
         Args:
             code: Python source code containing exactly one Plugin subclass.
+            origin: Optional source file path. When given, the code is executed as
+                a package rooted at the file's folder, so the plugin may import
+                sibling helper modules relatively (``from . import _helper``). When
+                omitted, behaviour is unchanged (a bare isolated module).
 
         Returns:
             True if the plugin was successfully loaded or reloaded.
 
         Raises:
+            CoreError: If the core is not in RUNNING state.
             PluginError: If no Plugin subclass is found, or loading fails.
         """
         ...
@@ -257,6 +283,17 @@ class Core(Protocol):
         """
         ...
 
+    async def get_plugin(self, plugin_id: PluginId | str) -> PluginProtocol | None:
+        """Get a plugin by ID or name.
+
+        Args:
+            plugin_id: Plugin UUID, UUID string, or name string
+
+        Returns:
+            The plugin if found, None otherwise
+        """
+        ...
+
     # Introspection
 
     async def list(self) -> PluginCollection:
@@ -322,6 +359,11 @@ class Core(Protocol):
         Returns:
             Current tick number
         """
+        ...
+
+    @property
+    def slip(self) -> int:
+        """Current tick slip in periods. Lock-free read. Returns 0 before core.start()."""
         ...
 
     @property

@@ -34,9 +34,9 @@ Hot-reload loads new plugins or replaces running ones without stopping the core.
 
 ## Reload a plugin in place
 
-When the class name matches a running plugin, `load_plugin()` performs a zero-downtime swap instead of fresh registration.
+When the plugin name (`metadata.name`, which defaults to the class name in snake_case) matches a running plugin, `load_plugin()` performs a zero-downtime swap instead of fresh registration.
 
-1. Supply the updated source. The class name must be the same as the running plugin.
+1. Supply the updated source. The plugin name must be the same as the running plugin — keep the class name unchanged (or pass the same explicit `name=`) if it overrides the default.
 
     ```python
     updated_code = """

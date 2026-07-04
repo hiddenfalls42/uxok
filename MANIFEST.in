@@ -1,0 +1,23 @@
+# Deliberate sdist curation. setuptools' default heuristic sweeps in the test
+# suite and other stray files; this file makes the sdist contents intentional.
+#
+# The sdist ships the kernel source plus the metadata a downstream needs to
+# build and understand the package. Tests are EXCLUDED for leanness — they are
+# not needed to build or install uxok and are available from the git repo.
+
+graft src/uxok
+
+include LICENSE
+include README.md
+include CHANGELOG.md
+include pyproject.toml
+
+# Everything below is developer/CI material, not part of a source distribution.
+prune tests
+prune .github
+prune docs
+prune examples
+prune scripts
+
+global-exclude __pycache__
+global-exclude *.py[cod]

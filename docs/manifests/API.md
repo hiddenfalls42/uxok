@@ -34,6 +34,9 @@
    - [7.3 CoreConfig](#73-coreconfig)
    - [7.4 CoreState](#74-corestate)
    - [7.5 PluginMetadata](#75-pluginmetadata)
+   - [7.6 AdmissionResult](#76-admissionresult)
+   - [7.7 SkippedSource](#77-skippedsource)
+   - [7.8 BatchLoadReport](#78-batchloadreport)
 8. [Exceptions](#8-exceptions)
 9. [ConfigField and REQUIRED](#9-configfield-and-required)
 10. [PluginCollection and PluginView](#10-plugincollection-and-pluginview)
@@ -152,6 +155,7 @@ See [§7.3 CoreConfig](#73-coreconfig) for the accepted enum values and numeric 
 | `unregister_plugin` | `async def unregister_plugin(self, plugin_id: UUID \| str, *, force: bool = False) -> bool` | `False` if not found | `PluginError` (active-operation or dependents present) |
 | `load_plugin` | `async def load_plugin(self, code: str, origin: str \| None = None) -> bool` | `True` if loaded or reloaded | `CoreError` if not RUNNING, else `PluginError` (compile or module-execution failure, or 0 or >1 Plugin subclass found) |
 | `load_plugins` | `async def load_plugins(self, sources: Iterable[tuple[str, str \| None]]) -> tuple[str, ...]` | plugin names, in commit (topological) order | `CoreError` if not RUNNING, else `BatchLoadError` (phase `"plan"` or `"commit"`, with `cause`, `installed`, `failed`) |
+| `try_load_plugins` | `async def try_load_plugins(self, sources: Iterable[tuple[str, str \| None]]) -> BatchLoadReport` | [`BatchLoadReport`](#78-batchloadreport) — `loaded` (commit order) and `skipped` (input order) partitioning the input | `CoreError` if not RUNNING (never `BatchLoadError`) |
 | `get_plugin` | `async def get_plugin(self, plugin_id: UUID \| str) -> PluginProtocol \| None` | live instance or `None` | — |
 | `list` | `async def list(self) -> PluginCollection` | `PluginCollection` — the single discovery surface (plugins **and** capabilities; see [§10](#10-plugincollection-and-pluginview)) | — |
 | `get_capability` | `async def get_capability(self, capability: str \| type, *, tag: str \| None = None) -> Any` | provider | `CapabilityError` if unavailable; `PluginError` if provider fails protocol contract |
@@ -164,6 +168,7 @@ Notes:
 - `load_plugins` also requires `RUNNING` (`CoreError` otherwise). It materializes every source, then commits all of them together under a single hold of the lifecycle lock — one atomic admission, not N separately-locked `load_plugin` calls. Commit order is a topological sort of the candidates' declared `provides`/`requires` (plus any already-live providers), so every candidate's `requires` is already satisfied by the time it is admitted. The sort breaks ties by source order, so the committed order is a deterministic function of the input — independent of `PYTHONHASHSEED`.
 - `load_plugins` is fresh-load-only: a candidate whose `metadata.name` collides with an already-live plugin is a plan-phase error — it does not hot-reload (use `load_plugin` for that).
 - On failure `load_plugins` raises `BatchLoadError`. `phase` (`"plan"` | `"commit"`) discriminates a pre-commit fault (a cycle, a missing capability, a duplicate name, a `max_plugins` overflow, a protocol-contract failure, a materialize/compile failure, or — under `error_on_conflict` — a duplicate provider) from a candidate's own `on_start()` failing partway through the commit loop. Because every statically-decidable fault is caught in the plan phase, the only fault that reaches commit is a candidate's own `on_start()` raising (or a TOCTOU assumption re-detected under the lock). `installed` is the committed prefix in commit order (always `()` on `phase="plan"`); `failed` names the offending candidate — its origin, its plugin name, or a `"sources[N]"` positional sentinel when an anonymous source fails to materialize — and is `None` only for graph-wide faults not attributable to one candidate (a cycle, a duplicate-provider collision, a `max_plugins` overflow); `cause` is the underlying exception, chained via `from`. Rollback on a `BatchLoadError` is host policy, not kernel behavior — `installed` is the exact teardown handle: feed it to `unregister_plugin` in reverse to unwind, or keep it as-is to accept a partial boot.
+- **`try_load_plugins` is the best-effort sibling of `load_plugins`** (RFC 0010). It shares the same planner and the same `RUNNING` requirement (`CoreError` otherwise), but where `load_plugins` refuses the whole batch on the first statically decidable fault, `try_load_plugins` commits the **maximal loadable subgraph** and returns a [`BatchLoadReport`](#78-batchloadreport) instead of ever raising `BatchLoadError`. Each faulting candidate — and everything that transitively depends on it — is pruned and recorded in `report.skipped` with a `reason` from a **closed vocabulary** (`materialize_error`, `duplicate_name`, `live_name_collision`, `missing_capability`, `cycle_member`, `contract_failure`, `duplicate_provider`, `max_plugins`, `dependent_of_skipped`, `on_start_error`; see [§7.7 SkippedSource](#77-skippedsource)). `report.loaded` and `report.skipped` partition the input exactly. It **never unregisters** an already-live plugin and never unwinds a committed candidate — rollback stays host policy, exactly as for `load_plugins`. A candidate that passes planning but whose commit raises is reported as `on_start_error` (its `on_start()` failing, or a plan→commit TOCTOU re-detected under the lock), with its uncommitted dependents pruned as `dependent_of_skipped`; earlier commits stand. Caveat on attribution: an anonymous source (`origin is None`) that fails to materialize is reported with `origin=None` and `name=None` — unlike `load_plugins`' `"sources[N]"` sentinel, the report carries no positional fallback, so give sources meaningful origins when you need to locate a specific failure.
 - `unregister_plugin`'s `force` is **keyword-only** (`*, force: bool = False`).
 - `get_capability`'s `tag` is **keyword-only**. When `capability` is a `type`, it is
   resolved to a name via `derive_capability_name` before lookup.
@@ -365,8 +370,10 @@ Notes:
 - `kernel.lifecycle` is a **reserved, kernel-provided** capability (RFC 0001 §2d), not
   backed by a plugin. Declaring `requires={"kernel.lifecycle"}` is always satisfiable (no
   provider, no bootstrap ordering); resolving it returns a *lifecycle facet* forwarding
-  exactly `register_plugin`, `unregister_plugin`, `load_plugin`, `get_plugin` to the
-  kernel. This is how a plugin obtains graph control under `"declared"`/`"sealed"`, where
+  exactly the six graph-control methods — `register_plugin`, `unregister_plugin`,
+  `load_plugin`, `load_plugins`, `try_load_plugins`, `get_plugin` — to the
+  kernel (the batch pair `load_plugins`/`try_load_plugins` was added by RFC 0010 so a
+  sealed loader can boot a graph in one call). This is how a plugin obtains graph control under `"declared"`/`"sealed"`, where
   those methods are no longer ambient on the `core` facet. The grant resolves identically
   under `"open"`, so plugins that use it are forward-compatible across all modes.
 - `kernel.dispatch` is a **reserved, kernel-recognized** grant (RFC 0002 §3.4) — unlike
@@ -674,6 +681,53 @@ The faults a candidate would raise against the *live* graph, computed without co
 | `contract_failures` | `frozenset[str]` | `frozenset()` | typed capabilities whose provider violates its protocol contract |
 | `ok` | `bool` (read-only property) | — | `True` iff every fault field is empty/false |
 
+### 7.7 SkippedSource
+
+`@dataclass(frozen=True, slots=True)` — `src/uxok/protocols/core.py`.
+One candidate that `Core.try_load_plugins` did not commit (RFC 0010). Importable from
+`uxok.protocols` or `uxok.core`; like `AdmissionResult` it is **not** a top-level `uxok`
+export — the kernel hands it to the caller inside a `BatchLoadReport`, read by attribute.
+
+| Field | Type | Meaning |
+|---|---|---|
+| `origin` | `str \| None` | the source's `origin` as supplied; `None` for an anonymous source |
+| `name` | `str \| None` | the plugin name, or `None` if the candidate never materialized |
+| `reason` | `str` | a code from the closed vocabulary below |
+| `cause` | `BaseException \| None` | the originating exception, or `None` for a synthesized planner verdict |
+
+---
+
+`reason` is a **closed vocabulary** — a host may branch on it exhaustively:
+
+| `reason` | `"value"` | Meaning |
+|---|---|---|
+| `materialize_error` | `"materialize_error"` | compile/exec/`__init__` failed; `name is None` |
+| `duplicate_name` | `"duplicate_name"` | two in-batch candidates claim the same name; **all** claimants skip |
+| `live_name_collision` | `"live_name_collision"` | the name is already live (fresh-load-only; use `load_plugin`) |
+| `missing_capability` | `"missing_capability"` | a required capability has no live and no surviving in-batch provider |
+| `cycle_member` | `"cycle_member"` | the candidate sits on a dependency cycle |
+| `contract_failure` | `"contract_failure"` | a provided typed capability violates its protocol |
+| `duplicate_provider` | `"duplicate_provider"` | under `error_on_conflict`, a provided capability collides (live or in-batch); every in-batch claimant skips |
+| `max_plugins` | `"max_plugins"` | the candidate fell beyond the `max_plugins` ceiling after ordering |
+| `dependent_of_skipped` | `"dependent_of_skipped"` | transitively pruned: a requirement's only providers were themselves skipped |
+| `on_start_error` | `"on_start_error"` | admission passed but commit raised (`on_start()` or a TOCTOU re-detection) |
+
+### 7.8 BatchLoadReport
+
+`@dataclass(frozen=True, slots=True)` — `src/uxok/protocols/core.py`.
+The outcome of `Core.try_load_plugins` (RFC 0010). Importable from `uxok.protocols` or
+`uxok.core`; **not** a top-level `uxok` export. `try_load_plugins` never raises
+`BatchLoadError` — it returns this report instead.
+
+| Field | Type | Meaning |
+|---|---|---|
+| `loaded` | `tuple[tuple[str, str \| None], ...]` | `(name, origin)` for committed plugins, in commit (topological) order |
+| `skipped` | `tuple[SkippedSource, ...]` | excluded candidates, in input order |
+
+`loaded` and `skipped` **partition the input exactly** — every source appears in one and
+only one (a materialize failure lands in `skipped` with `name is None`), so
+`len(loaded) + len(skipped)` equals the number of sources supplied.
+
 ---
 
 ## 8. Exceptions
@@ -927,6 +981,7 @@ __all__ = [
 ```python
 from uxok.protocols import (
     AdmissionResult,
+    BatchLoadReport,
     Core,
     CoreConfig,
     CoreState,
@@ -934,6 +989,7 @@ from uxok.protocols import (
     Hook,
     PluginMetadata,
     PluginProtocol,
+    SkippedSource,
 )
 ```
 

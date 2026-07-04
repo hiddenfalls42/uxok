@@ -430,6 +430,8 @@ _DATACLASS_PARAMS: list[tuple[str, str, str]] = [
     ("CoreConfig", "uxok.protocols", "CoreConfig"),
     ("PluginMetadata", "uxok.protocols", "PluginMetadata"),
     ("CapabilityInfo", "uxok.registry", "CapabilityInfo"),
+    ("SkippedSource", "uxok.protocols", "SkippedSource"),
+    ("BatchLoadReport", "uxok.protocols", "BatchLoadReport"),
 ]
 
 _CTOR_PARAMS: list[tuple[str, str, str]] = [

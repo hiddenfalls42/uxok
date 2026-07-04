@@ -17,7 +17,11 @@ from pathlib import Path
 
 import pytest
 import pytest_asyncio
-from examples.example_host.host import build_host, host_configs
+from examples.example_host.host import (
+    build_host,
+    build_host_best_effort,
+    host_configs,
+)
 from examples.example_host.model import Model
 from examples.example_host.shutdown import ShutdownHandler
 
@@ -123,6 +127,32 @@ async def test_missing_required_config_fails_the_whole_batch():
         assert (await c.list()).count == 0
     finally:
         await c.stop()
+
+
+@pytest.mark.asyncio
+async def test_build_host_best_effort_boots_the_full_graph(core):
+    """With no broken sources, best-effort boot loads exactly what build_host
+    would, in the same order, and reports nothing skipped."""
+    report = await build_host_best_effort(core)
+
+    assert tuple(name for name, _ in report.loaded) == _EXPECTED_ORDER
+    assert report.skipped == ()
+    assert await core.get_capability("llm") is not None
+
+
+@pytest.mark.asyncio
+async def test_build_host_best_effort_skips_a_broken_file_and_keeps_the_graph(core):
+    """One unparseable extra source is reported as materialize_error while the
+    curated graph boots intact — the motivating case for try_load_plugins."""
+    broken = ("def not valid python (", "broken_plugin.py")
+    report = await build_host_best_effort(core, extra_sources=[broken])
+
+    assert tuple(name for name, _ in report.loaded) == _EXPECTED_ORDER
+    assert [(s.origin, s.name, s.reason) for s in report.skipped] == [
+        ("broken_plugin.py", None, "materialize_error")
+    ]
+    # The graph is fully live despite the broken sibling.
+    assert (await core.list()).count == len(_EXPECTED_ORDER)
 
 
 @pytest.mark.asyncio

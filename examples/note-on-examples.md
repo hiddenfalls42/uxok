@@ -1,7 +1,8 @@
 `example_host/` is the destination of the tutorial series: a small
 conversational-agent program, one plugin per module, that wires the kernel features
 a real host leans on — batch source-loading boot (`core.load_plugins`, importing no
-plugin class, all or nothing), a cid-correlated conversation over the event bus (no
+plugin class, all or nothing — with `build_host_best_effort` showing the best-effort
+`core.try_load_plugins` alternative), a cid-correlated conversation over the event bus (no
 sleeps), two competing **typed** `llm` providers selected by tag from config
 (`ConfigField`/`REQUIRED`), a stateful `persona` hook whose reply count survives
 **hot reload** (`get_state`/`restore_state`), a watcher that hot-loads edited plugin

@@ -2,6 +2,12 @@
 
 <!-- One line per note added, updated, or removed. Format: YYYY-MM-DD | action | path — description -->
 
+2026-07-04 | updated | docs/manifests/API.md — RFC 0010: try_load_plugins row + Notes in §2.2; kernel.lifecycle grant surface four->six methods (§3.2); new §7.7 SkippedSource (closed reason vocabulary) and §7.8 BatchLoadReport; both names added to §11 uxok.protocols block; §7 TOC gains 7.6-7.8
+2026-07-04 | updated | docs/how-to/how-to-boot-a-plugin-graph-in-order.md — RFC 0010: new §2 "Boot the loadable subset with try_load_plugins" (report shape, reason vocabulary, transitive pruning, resubmit-later pattern); manual/factor/poll sections renumbered 3-5; intro leads with both verbs
+2026-07-04 | updated | docs/how-to/index.md — boot-a-plugin-graph blurb names both core.load_plugins() and core.try_load_plugins()
+2026-07-04 | updated | docs/tutorials/getting-started.md — RFC 0010: cross-link to the best-effort try_load_plugins sibling from the load_plugins passage
+2026-07-04 | updated | examples/example_host/ — RFC 0010: build_host_best_effort demonstrates core.try_load_plugins as a foil to the all-or-nothing build_host; note-on-examples + package docstring track it
+
 2026-07-03 | updated | docs/tutorials/getting-started.md — Next steps: example_host description tracks its RFC 0009 final form (stateful persona, config-selected models, watcher, supervisor); "destination this starter grows into" framing for the tutorial series
 2026-07-03 | updated | docs/how-to/how-to-boot-a-plugin-graph-in-order.md — review F-3/F-4: BatchLoadError paragraph reconciled with the hardened plan phase (full pre-commit fault list, failed=None only for the three graph-wide faults, sources[N] sentinel); dead ../reference/ link repointed at docs/manifests/API.md
 2026-07-03 | updated | docs/tutorials/getting-started.md — review F-2: host.py block's docstring run instruction made path-neutral (`python -m <package>.host`); synced byte-for-byte with examples/getting_started/host.py

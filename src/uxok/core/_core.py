@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from contextlib import suppress
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
@@ -27,9 +28,11 @@ from uxok.events._bus import _EventBus
 from uxok.hooks._system import _HookSystem
 from uxok.protocols import (
     AdmissionResult,
+    BatchLoadReport,
     CoreConfig,
     CoreState,
     PluginProtocol,
+    SkippedSource,
 )
 from uxok.protocols import (
     Core as CoreProtocol,
@@ -53,6 +56,56 @@ from uxok.registry.impl import _Registry
 from uxok.utils.async_primitives import _AsyncSafeSet
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True, slots=True)
+class _BatchCandidate:
+    """A materialized batch source awaiting planning (RFC 0008/0010).
+
+    ``index`` is the candidate's position in the caller's original ``sources``
+    iterable — stable across pruning, so :meth:`Core.try_load_plugins` can order
+    its report by input position and key per-candidate skips by it.
+    """
+
+    index: int
+    instance: PluginProtocol
+    name: str
+    origin: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class _PlanFault:
+    """A plan-phase fault in detection order (RFC 0010 §4.5).
+
+    The fault-collecting planner records these instead of raising, so the two
+    verbs can share one planner: :meth:`Core.load_plugins` raises ``faults[0]``
+    (reproducing its first-fault contract byte-for-byte), while
+    :meth:`Core.try_load_plugins` ignores the fault list and prunes via ``skips``.
+    """
+
+    cause: BaseException
+    failed: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class _BatchPlan:
+    """The output of :meth:`Core._collect_batch_plan` (RFC 0010 §4.5).
+
+    ``ordered`` is the committable subgraph in topological order. ``skips`` maps a
+    candidate's ``index`` to its ``(reason, cause)`` (first reason wins).
+    ``faults`` is the detection-ordered fault list the atomic verb raises from.
+    ``providers`` (capability → in-batch provider indices) and
+    ``unsatisfied_requires`` (index → the capability names it needs from the
+    batch) are plan-time snapshots the best-effort verb reuses to prune the
+    dependents of a candidate whose commit later fails — never the live
+    capability table, which mutates mid-commit.
+    """
+
+    ordered: list[_BatchCandidate]
+    skips: dict[int, tuple[str, BaseException | None]]
+    faults: list[_PlanFault]
+    providers: dict[str, list[int]]
+    unsatisfied_requires: dict[int, list[str]]
 
 
 class _ReentrantLock:
@@ -607,134 +660,277 @@ class Core(CoreProtocol):
             await self._register_plugin_now(temp_instance)
             logger.info("Plugin loaded", extra=log_op("load_plugin", plugin_name=plugin_name))
 
-    def _plan_batch_order(
+    def _collect_batch_plan(
         self,
-        candidates: list[tuple[PluginProtocol, str]],
+        candidates: list[_BatchCandidate],
         live_names: frozenset[str],
-    ) -> list[tuple[PluginProtocol, str]]:
-        """Compute a fresh-load commit order for a batch of materialized candidates.
+    ) -> _BatchPlan:
+        """Compute the commit order and every plan-phase fault for a batch.
 
-        Pure, synchronous, lock-free (RFC 0008 §4.3): every capability-system
-        read used here (``missing_requirements``, ``provides_conflicts``,
+        The single planner behind both batch verbs (RFC 0010 §4.5). It is pure,
+        synchronous, and lock-free (RFC 0008 §4.3): every capability-system read
+        used here (``missing_requirements``, ``provides_conflicts``,
         ``contract_error``, ``collision_policy``) is itself synchronous, so this
-        method holds no lock and contains no ``await`` — the same lock-free
-        invariant the registry/capability-system mutations honor (decision
-        record #12).
+        method holds no lock and contains no ``await`` — the same invariant the
+        registry/capability-system mutations honor (decision record #12).
 
-        Checks run in this order; the first fault found raises a plan-phase
-        ``BatchLoadError`` and nothing is committed (``installed`` stays the
-        default ``()``):
+        Instead of raising on the first fault, it **collects**: every excluded
+        candidate lands in ``skips`` (keyed by original ``index``, first reason
+        wins) and every fault lands in ``faults`` in detection order. The stages
+        below run in the same order, and iterate the same candidate set in the
+        same order, as the pre-0010 raising planner **whenever no earlier fault
+        exists** — so ``faults[0]`` reproduces that planner's first raise
+        byte-for-byte, which is how :meth:`load_plugins` keeps its exact contract
+        (see :meth:`_plan_batch_order`). When an earlier fault exists, later
+        entries are pruning detail the atomic verb never surfaces.
 
-        1. A duplicate ``name`` within the batch.
-        2. A candidate's ``name`` collides with a live plugin — batch loading
-           is fresh-load-only (RFC 0008 §4.7); a name that already exists must
-           go through :meth:`load_plugin` to hot-reload.
-        3. The batch would push the plugin count over ``max_plugins``.
-        4. (only when ``capability_collision == "error_on_conflict"``) a
-           candidate's provided capability collides with a live provider, or
-           with another candidate in the batch.
-        5. A candidate provides a typed capability whose declared protocol it
-           does not implement (a pure per-candidate contract failure).
-        6. A candidate's missing requirement has no in-batch provider and no
-           live provider.
-        7. A cycle in the resulting candidate dependency graph.
+        Stage order:
+
+        1. **Name scan** (input order; the duplicate check precedes the live
+           check per candidate). A duplicate name skips **all** claimants
+           (``duplicate_name``); a live collision skips ``live_name_collision``
+           and its name never enters the claimant map.
+        2. **max_plugins fault** (fault list only — the message uses the
+           deduped-name count for byte-parity; the tail-cut is stage 9).
+        3. **Providers map** over all candidates (capability → provider indices).
+        4. (``error_on_conflict`` only) live provider conflicts per candidate,
+           then in-batch duplicate providers — **all** claimants skip
+           ``duplicate_provider`` (no winner is chosen).
+        5. **Contract failures** (per-candidate, zero-TOCTOU).
+        6. **Missing capability** + dependency edges; records
+           ``unsatisfied_requires`` for the surviving candidates.
+        7. **Transitive prune to fixed point** (``dependent_of_skipped``): a
+           candidate whose in-batch-only requirement has lost every provider to
+           an earlier skip. This is correctness, not reporting — :func:`topo_sort`
+           silently drops edges to out-of-set names, so an unpruned stranded
+           consumer would fail at-commit admission and be misreported.
+        8. **Cycle detection** over the survivors; ``unresolved`` splits into the
+           true cycle core (``cycle_member``) and its pure dependents
+           (``dependent_of_skipped``) by a reverse-peel (a second
+           :func:`topo_sort` on the inverted edges). The split is a known
+           approximation: a bridge node between two cycles labels as
+           ``cycle_member``.
+        9. **max_plugins tail-cut**: candidates beyond ``max(ceiling -
+           len(live_names), 0)`` in the final topological order skip
+           ``max_plugins``. No post-cut re-prune is needed — topo places every
+           in-batch-only consumer after its providers, so a cut provider implies
+           its consumers are also in the tail; a live-satisfied consumer carries
+           no edge and is unharmed.
 
         Args:
-            candidates: Materialized ``(instance, name)`` pairs, none yet
-                registered.
-            live_names: Names of plugins already registered, snapshotted by
-                the caller before planning.
-
-        Returns:
-            ``candidates`` reordered into a valid topological commit order. For
-            any capability that has **no** live provider, every in-batch
-            provider of it precedes every in-batch consumer (consumer after ALL
-            in-batch providers, RFC 0008 §4.3). When a capability is already
-            live-satisfied no ordering edge is drawn — the consumer may commit
-            before an in-batch provider of the same capability, which is
-            correct because the live provider already satisfies the requirement.
-            Ties break by input order (deterministic; see :func:`topo_sort`).
-
-        Raises:
-            BatchLoadError: ``phase="plan"``, for any of the faults above.
+            candidates: Materialized candidates, none yet registered; ``index``
+                is the position in the caller's original ``sources``.
+            live_names: Names of plugins already registered, snapshotted by the
+                caller before planning.
         """
         caps = self._capability_system
-
+        by_index = {c.index: c for c in candidates}
+        skips: dict[int, tuple[str, BaseException | None]] = {}
+        faults: list[_PlanFault] = []
         cause: BaseException
-        by_name: dict[str, PluginProtocol] = {}
-        for instance, name in candidates:
-            if name in by_name:
-                cause = PluginError(f"Duplicate plugin name '{name}' in batch load")
-                raise BatchLoadError(phase="plan", cause=cause, failed=name) from cause
-            if name in live_names:
-                cause = PluginError(
-                    f"Plugin '{name}' is already live; use load_plugin() to hot-reload"
-                )
-                raise BatchLoadError(phase="plan", cause=cause, failed=name) from cause
-            by_name[name] = instance
 
-        # max_plugins overflow is knowable now — a batch-size fault, not
-        # attributable to one candidate, so fail here rather than partway
-        # through commit with a partial install (registry gates the same value).
+        # Stage 1 — name scan. Duplicate check before live check, per candidate,
+        # exactly as the raising planner ordered them.
+        claimants: dict[str, list[int]] = {}
+        dup_cause: dict[str, BaseException] = {}
+        for c in candidates:
+            if c.name in claimants:
+                if c.name not in dup_cause:
+                    dup_cause[c.name] = PluginError(
+                        f"Duplicate plugin name '{c.name}' in batch load"
+                    )
+                    faults.append(_PlanFault(dup_cause[c.name], c.name))
+                claimants[c.name].append(c.index)
+                continue
+            if c.name in live_names:
+                cause = PluginError(
+                    f"Plugin '{c.name}' is already live; use load_plugin() to hot-reload"
+                )
+                skips[c.index] = ("live_name_collision", cause)
+                faults.append(_PlanFault(cause, c.name))
+                continue
+            claimants[c.name] = [c.index]
+        for name, indices in claimants.items():
+            if len(indices) > 1:
+                for index in indices:
+                    skips.setdefault(index, ("duplicate_name", dup_cause[name]))
+
+        # Stage 2 — max_plugins overflow: a batch-size fault (failed=None). Record
+        # for the atomic verb; the actual pruning is the stage-9 tail-cut.
         ceiling = self._core_config.max_plugins
-        if ceiling is not None and len(live_names) + len(by_name) > ceiling:
+        if ceiling is not None and len(live_names) + len(claimants) > ceiling:
             cause = PluginError(
                 f"max_plugins limit ({ceiling}) would be exceeded: "
-                f"{len(live_names)} live + {len(by_name)} in batch"
+                f"{len(live_names)} live + {len(claimants)} in batch"
             )
-            raise BatchLoadError(phase="plan", cause=cause, failed=None) from cause
+            faults.append(_PlanFault(cause, None))
 
-        providers: dict[str, list[str]] = {}
-        for name, instance in by_name.items():
-            for capability in instance.metadata.provides:
-                providers.setdefault(capability, []).append(name)
+        # Stage 3 — providers over ALL candidates (capability → provider indices,
+        # input order). A skipped provider stays in the map so stage 7 can see
+        # that a consumer's only provider was pruned (dependent_of_skipped) rather
+        # than mislabel it missing_capability.
+        providers: dict[str, list[int]] = {}
+        for c in candidates:
+            for capability in c.instance.metadata.provides:
+                providers.setdefault(capability, []).append(c.index)
 
+        def alive(index: int) -> bool:
+            return index not in skips
+
+        # Stage 4 — collision policy: live conflicts (failed=name) before in-batch
+        # duplicates (failed=None). No winner is selected among in-batch claimants.
         if caps.collision_policy == "error_on_conflict":
-            for name, instance in by_name.items():
-                live_conflicts = caps.provides_conflicts(instance)
+            for c in candidates:
+                if not alive(c.index):
+                    continue
+                live_conflicts = caps.provides_conflicts(c.instance)
                 if live_conflicts:
                     capability = sorted(live_conflicts)[0]
                     cause = caps.collision_error(capability, caps.providers_of(capability))
-                    raise BatchLoadError(phase="plan", cause=cause, failed=name) from cause
+                    skips.setdefault(c.index, ("duplicate_provider", cause))
+                    faults.append(_PlanFault(cause, c.name))
+            for capability, provider_indices in providers.items():
+                live_providers = [i for i in provider_indices if alive(i)]
+                if len(live_providers) > 1:
+                    cause = caps.collision_error(
+                        capability, [by_index[i].instance for i in live_providers]
+                    )
+                    for i in live_providers:
+                        skips.setdefault(i, ("duplicate_provider", cause))
+                    faults.append(_PlanFault(cause, None))
 
-            for capability, providing_names in providers.items():
-                if len(providing_names) > 1:
-                    cause = caps.collision_error(capability, [by_name[n] for n in providing_names])
-                    raise BatchLoadError(phase="plan", cause=cause, failed=None) from cause
-
-        # Contract failures are a pure function of the candidate alone (zero
-        # TOCTOU), so front-load them here rather than letting a provider that
-        # declares a Protocol it doesn't implement fail mid-commit.
-        for name, instance in by_name.items():
-            contract_error = caps.contract_error(instance)
+        # Stage 5 — contract failures are a pure function of the candidate alone
+        # (zero TOCTOU), so front-load them rather than fail mid-commit.
+        for c in candidates:
+            if not alive(c.index):
+                continue
+            contract_error = caps.contract_error(c.instance)
             if contract_error is not None:
-                raise BatchLoadError(phase="plan", cause=contract_error, failed=name) from (
-                    contract_error
-                )
+                skips.setdefault(c.index, ("contract_failure", contract_error))
+                faults.append(_PlanFault(contract_error, c.name))
 
-        deps: dict[str, set[str]] = {name: set() for name in by_name}
-        for name, instance in by_name.items():
-            for capability in sorted(caps.missing_requirements(instance)):
+        # Stage 6 — missing capability + dependency edges. missing_requirements
+        # already excludes live-satisfied capabilities, so a requirement with no
+        # in-batch provider is unsatisfiable (missing_capability); one with an
+        # in-batch provider becomes an edge and is recorded for stage 7.
+        deps: dict[int, set[int]] = {c.index: set() for c in candidates}
+        unsatisfied_requires: dict[int, list[str]] = {}
+        for c in candidates:
+            if not alive(c.index):
+                continue
+            needs: list[str] = []
+            for capability in sorted(caps.missing_requirements(c.instance)):
                 in_batch_providers = providers.get(capability)
                 if in_batch_providers:
-                    deps[name].update(in_batch_providers)
+                    deps[c.index].update(in_batch_providers)
+                    needs.append(capability)
                 else:
                     available = sorted(set(caps.live_capability_names()) | set(providers))
                     cause = MissingCapabilityError(
-                        [capability], phase="plan", available=available, requirer=name
+                        [capability], phase="plan", available=available, requirer=c.name
                     )
-                    raise BatchLoadError(phase="plan", cause=cause, failed=name) from cause
+                    skips.setdefault(c.index, ("missing_capability", cause))
+                    faults.append(_PlanFault(cause, c.name))
+                    break
+            if alive(c.index):
+                unsatisfied_requires[c.index] = needs
 
-        ordered_names, unresolved = topo_sort(by_name.keys(), deps)
+        # Stage 7 — transitive prune to a fixed point: a survivor whose in-batch
+        # requirement has lost every provider to an earlier skip is stranded.
+        changed = True
+        while changed:
+            changed = False
+            for index, needs in unsatisfied_requires.items():
+                if not alive(index):
+                    continue
+                for capability in needs:
+                    provs = providers.get(capability, [])
+                    if provs and all(not alive(p) for p in provs):
+                        blockers = sorted({by_index[p].name for p in provs})
+                        cause = PluginError(
+                            f"Plugin '{by_index[index].name}' skipped: required capability "
+                            f"'{capability}' has no loadable provider "
+                            f"(all in-batch providers skipped: {', '.join(blockers)})"
+                        )
+                        skips[index] = ("dependent_of_skipped", cause)
+                        faults.append(_PlanFault(cause, by_index[index].name))
+                        changed = True
+                        break
+
+        # Stage 8 — cycle detection over the survivors.
+        survivors = [c.index for c in candidates if alive(c.index)]
+        ordered_indices, unresolved = topo_sort(survivors, deps)
         if unresolved:
-            members = sorted(unresolved)
+            members = sorted(by_index[i].name for i in unresolved)
             cause = CoreError(
                 "Circular dependency detected in batch load order; "
                 f"plugins involved: {', '.join(members)}"
             )
-            raise BatchLoadError(phase="plan", cause=cause, failed=None) from cause
+            faults.append(_PlanFault(cause, None))
+            # Reverse-peel: invert the edges among the unresolved nodes; the nodes
+            # still unplaceable in the reversed graph are the true cycle core, and
+            # the peeled ones are pure dependents of the cycle.
+            inverted: dict[int, set[int]] = {i: set() for i in unresolved}
+            for i in unresolved:
+                for dep in deps[i]:
+                    if dep in inverted:
+                        inverted[dep].add(i)
+            _, cycle_core = topo_sort(list(unresolved), inverted)
+            for i in unresolved:
+                if i in cycle_core:
+                    skips[i] = ("cycle_member", cause)
+                else:
+                    skips[i] = ("dependent_of_skipped", cause)
 
-        return [(by_name[name], name) for name in ordered_names]
+        # Stage 9 — max_plugins tail-cut on the final topological order.
+        if ceiling is not None:
+            capacity = max(ceiling - len(live_names), 0)
+            for i in ordered_indices[capacity:]:
+                cause = PluginError(
+                    f"max_plugins limit ({ceiling}) reached: '{by_index[i].name}' "
+                    "exceeds the batch's remaining capacity and was not loaded"
+                )
+                skips.setdefault(i, ("max_plugins", cause))
+            ordered_indices = ordered_indices[:capacity]
+
+        ordered = [by_index[i] for i in ordered_indices]
+        return _BatchPlan(
+            ordered=ordered,
+            skips=skips,
+            faults=faults,
+            providers=providers,
+            unsatisfied_requires=unsatisfied_requires,
+        )
+
+    def _plan_batch_order(
+        self,
+        candidates: list[_BatchCandidate],
+        live_names: frozenset[str],
+    ) -> list[_BatchCandidate]:
+        """Raise-on-first-fault wrapper over :meth:`_collect_batch_plan`.
+
+        The atomic disposition of the shared planner (RFC 0010 §4.5): if the
+        collector recorded any fault, re-raise the first one as the plan-phase
+        ``BatchLoadError`` — same detection order, same message, same ``failed``
+        attribution as before the fault-collecting refactor, so ``load_plugins``
+        and its tests are unchanged. Otherwise return the committable order.
+
+        Returns:
+            ``candidates`` reordered into a valid topological commit order. For
+            any capability with **no** live provider, every in-batch provider of
+            it precedes every in-batch consumer (RFC 0008 §4.3). Ties break by
+            input order (deterministic; see :func:`topo_sort`).
+
+        Raises:
+            BatchLoadError: ``phase="plan"``, for the first collected fault.
+        """
+        plan = self._collect_batch_plan(candidates, live_names)
+        if plan.faults:
+            fault = plan.faults[0]
+            raise BatchLoadError(
+                phase="plan", cause=fault.cause, failed=fault.failed
+            ) from fault.cause
+        return plan.ordered
 
     async def load_plugins(self, sources: Iterable[tuple[str, str | None]]) -> tuple[str, ...]:
         """Boot a batch of plugin sources in dependency order, committed as one unit.
@@ -798,7 +994,7 @@ class Core(CoreProtocol):
         if self.state is not CoreState.RUNNING:
             raise CoreError("Core must be started before loading plugins")
 
-        candidates: list[tuple[PluginProtocol, str]] = []
+        candidates: list[_BatchCandidate] = []
         for index, (code, origin) in enumerate(sources):
             try:
                 instance, name = await self._materialize_plugin(code, origin)
@@ -812,7 +1008,9 @@ class Core(CoreProtocol):
                 # (``failed=None`` is reserved for graph-wide faults).
                 failed = origin if origin is not None else f"sources[{index}]"
                 raise BatchLoadError(phase="plan", cause=e, failed=failed) from e
-            candidates.append((instance, name))
+            candidates.append(
+                _BatchCandidate(index=index, instance=instance, name=name, origin=origin)
+            )
 
         live_names = frozenset(p.metadata.name for p in (await self._registry.all()).values())
 
@@ -820,19 +1018,140 @@ class Core(CoreProtocol):
 
         installed: list[str] = []
         async with self._lifecycle_lock:
-            for instance, name in ordered:
+            for candidate in ordered:
                 try:
-                    await self._register_plugin_now(instance)
+                    await self._register_plugin_now(candidate.instance)
                 except Exception as e:
                     raise BatchLoadError(
                         phase="commit",
                         cause=e,
                         installed=tuple(installed),
-                        failed=name,
+                        failed=candidate.name,
                     ) from e
-                installed.append(name)
+                installed.append(candidate.name)
 
         return tuple(installed)
+
+    async def try_load_plugins(self, sources: Iterable[tuple[str, str | None]]) -> BatchLoadReport:
+        """Best-effort sibling of :meth:`load_plugins` (RFC 0010).
+
+        Commits the **maximal loadable subgraph** and returns a
+        :class:`BatchLoadReport` — it never raises :class:`BatchLoadError`. The
+        same three phases as :meth:`load_plugins`, but every fault prunes the
+        offending candidate (and its transitive dependents) instead of refusing
+        the batch:
+
+        1. **Materialize** — a source that fails to compile/exec/instantiate is
+           recorded as a ``materialize_error`` skip (``name is None``, ``origin``
+           as supplied) and the rest continue; no positional ``sources[N]``
+           sentinel — that is the atomic verb's ``failed`` convention.
+        2. **Plan** — :meth:`_collect_batch_plan` computes the loadable subgraph
+           and a skip for every excluded candidate (RFC 0010 §4.2 vocabulary).
+        3. **Commit** — the plan's order is installed under one hold of the
+           reentrant lifecycle lock. Before each candidate, an in-batch
+           requirement whose providers all failed to commit prunes it as
+           ``dependent_of_skipped`` (checked against **plan-time snapshots** —
+           ``plan.providers``/``plan.unsatisfied_requires`` — never the live
+           capability table, which mutates mid-commit). A candidate whose own
+           ``_register_plugin_now`` raises is recorded as ``on_start_error``;
+           because the plan is topologically ordered, its uncommitted dependents
+           are pruned in turn when the loop reaches them.
+
+        It **never unregisters** an already-live plugin, and never unwinds a
+        committed candidate — rollback stays host policy (RFC 0010 §2.3). A
+        benign plan→commit TOCTOU degrades to an ``on_start_error`` skip with the
+        admission error as ``cause`` (same posture as RFC 0008 §4.8), never
+        registry corruption. The lifecycle lock is reentrant, so a candidate's
+        ``on_start()`` re-entering ``load_plugin``/``load_plugins`` during commit
+        does not deadlock.
+
+        Args:
+            sources: ``(code, origin)`` pairs, one per plugin — the same shape as
+                :meth:`load_plugins`. ``origin`` may be ``None``.
+
+        Returns:
+            A :class:`BatchLoadReport` whose ``loaded`` (commit order) and
+            ``skipped`` (input order) partition the input exactly.
+            ``BatchLoadReport((), ())`` for empty ``sources``.
+
+        Raises:
+            CoreError: If the core is not in RUNNING state.
+        """
+        if self.state is not CoreState.RUNNING:
+            raise CoreError("Core must be started before loading plugins")
+
+        materialize_skips: dict[int, SkippedSource] = {}
+        candidates: list[_BatchCandidate] = []
+        total = 0
+        for index, (code, origin) in enumerate(sources):
+            total = index + 1
+            try:
+                instance, name = await self._materialize_plugin(code, origin)
+            except Exception as e:
+                materialize_skips[index] = SkippedSource(
+                    origin=origin, name=None, reason="materialize_error", cause=e
+                )
+                continue
+            candidates.append(
+                _BatchCandidate(index=index, instance=instance, name=name, origin=origin)
+            )
+
+        live_names = frozenset(p.metadata.name for p in (await self._registry.all()).values())
+        plan = self._collect_batch_plan(candidates, live_names)
+        by_index = {c.index: c for c in candidates}
+
+        report_skips: dict[int, tuple[str, BaseException | None]] = dict(plan.skips)
+        loaded: list[_BatchCandidate] = []
+        committed: set[int] = set()
+        async with self._lifecycle_lock:
+            for candidate in plan.ordered:
+                stranded = next(
+                    (
+                        cap
+                        for cap in plan.unsatisfied_requires.get(candidate.index, ())
+                        if not any(p in committed for p in plan.providers.get(cap, ()))
+                    ),
+                    None,
+                )
+                if stranded is not None:
+                    blockers = sorted({by_index[p].name for p in plan.providers.get(stranded, ())})
+                    report_skips[candidate.index] = (
+                        "dependent_of_skipped",
+                        PluginError(
+                            f"Plugin '{candidate.name}' skipped: required capability "
+                            f"'{stranded}' has no committed provider "
+                            f"(in-batch providers not loaded: {', '.join(blockers)})"
+                        ),
+                    )
+                    continue
+                try:
+                    await self._register_plugin_now(candidate.instance)
+                except Exception as e:
+                    report_skips[candidate.index] = ("on_start_error", e)
+                    continue
+                committed.add(candidate.index)
+                loaded.append(candidate)
+
+        skipped: list[SkippedSource] = []
+        for index in range(total):
+            if index in materialize_skips:
+                skipped.append(materialize_skips[index])
+            elif index in report_skips:
+                reason, cause = report_skips[index]
+                candidate = by_index[index]
+                skipped.append(
+                    SkippedSource(
+                        origin=candidate.origin,
+                        name=candidate.name,
+                        reason=reason,
+                        cause=cause,
+                    )
+                )
+
+        return BatchLoadReport(
+            loaded=tuple((c.name, c.origin) for c in loaded),
+            skipped=tuple(skipped),
+        )
 
     async def unregister_plugin(self, plugin_id: PluginId | str, *, force: bool = False) -> bool:
         """Unregister a plugin.

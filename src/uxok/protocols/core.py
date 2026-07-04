@@ -53,6 +53,65 @@ class AdmissionResult:
         )
 
 
+@dataclass(frozen=True, slots=True)
+class SkippedSource:
+    """One candidate that :meth:`Core.try_load_plugins` did not commit (RFC 0010 §4.1).
+
+    Best-effort batch loading commits the maximal loadable subgraph and reports
+    every excluded candidate here instead of raising. Each record names the
+    source (as supplied), the plugin name if it materialized, a ``reason`` from
+    the closed vocabulary below, and the originating exception (``None`` for
+    reasons the planner synthesizes without one to raise).
+
+    The ``reason`` vocabulary is closed — a host may branch on it exhaustively:
+
+    - ``materialize_error`` — compile/exec/``__init__`` failed; ``name is None``.
+    - ``duplicate_name`` — two in-batch candidates claim the same name; **all**
+      claimants skip.
+    - ``live_name_collision`` — the name is already live (batch loading is
+      fresh-load-only; use :meth:`load_plugin` to hot-reload).
+    - ``missing_capability`` — a required capability has no live provider and no
+      surviving in-batch provider.
+    - ``cycle_member`` — the candidate sits on a dependency cycle.
+    - ``contract_failure`` — a provided typed capability violates its protocol.
+    - ``duplicate_provider`` — under ``error_on_conflict``, the candidate's
+      provided capability collides with a live provider or another in-batch
+      candidate; every in-batch claimant skips (no winner is chosen).
+    - ``max_plugins`` — the candidate fell beyond the ``max_plugins`` ceiling
+      after the loadable subgraph was ordered.
+    - ``dependent_of_skipped`` — transitively pruned: a requirement's only
+      providers were themselves skipped (the ``cause`` names the blockers).
+    - ``on_start_error`` — admission passed but commit raised (the candidate's
+      ``on_start()`` or a TOCTOU re-detection under the lock).
+    """
+
+    origin: str | None
+    """The source's ``origin`` as supplied; ``None`` for an anonymous source."""
+    name: str | None
+    """The plugin name, or ``None`` if the candidate never materialized."""
+    reason: str
+    """A code from the closed vocabulary above (RFC 0010 §4.2)."""
+    cause: BaseException | None
+    """The originating exception, or ``None`` for a synthesized planner verdict."""
+
+
+@dataclass(frozen=True, slots=True)
+class BatchLoadReport:
+    """The outcome of :meth:`Core.try_load_plugins` (RFC 0010 §4.1).
+
+    Best-effort batch loading never raises ``BatchLoadError``; it returns this
+    report instead. ``loaded`` and ``skipped`` partition the input exactly: every
+    source appears in one and only one (a materialize failure lands in
+    ``skipped`` with ``name is None``), so ``len(loaded) + len(skipped)`` equals
+    the number of sources supplied.
+    """
+
+    loaded: tuple[tuple[str, str | None], ...]
+    """``(name, origin)`` pairs for committed plugins, in commit (topological) order."""
+    skipped: tuple[SkippedSource, ...]
+    """Excluded candidates, in input order."""
+
+
 @runtime_checkable
 class Core(Protocol):
     """Immutable core system interface.
@@ -147,6 +206,39 @@ class Core(Protocol):
                 source fails. ``phase`` discriminates a pre-commit graph fault
                 (``"plan"``, ``installed == ()``) from a mid-batch commit
                 failure (``"commit"``, ``installed`` is the live prefix).
+
+        See :meth:`try_load_plugins` for the best-effort sibling that commits the
+        maximal loadable subgraph and reports skips instead of raising.
+        """
+        ...
+
+    async def try_load_plugins(self, sources: Iterable[tuple[str, str | None]]) -> BatchLoadReport:
+        """Best-effort sibling of :meth:`load_plugins` (RFC 0010).
+
+        Commits the **maximal loadable subgraph** and returns a
+        :class:`BatchLoadReport` describing every committed and every excluded
+        candidate — it never raises :class:`BatchLoadError`. Where
+        :meth:`load_plugins` refuses the whole batch on the first statically
+        decidable fault, this verb prunes the faulting candidate (and anything
+        that transitively depends on it) and commits the rest.
+
+        The same planner backs both verbs; they differ only in disposition
+        (raise-first vs prune-and-commit). It never unregisters an already-live
+        plugin — rollback stays host policy. A candidate that passes planning but
+        whose commit raises is reported as ``on_start_error`` and its uncommitted
+        dependents as ``dependent_of_skipped``; earlier commits stand.
+
+        Args:
+            sources: ``(code, origin)`` pairs, one per plugin — the same shape as
+                :meth:`load_plugins`. ``origin`` may be ``None``.
+
+        Returns:
+            A :class:`BatchLoadReport` whose ``loaded`` (commit order) and
+            ``skipped`` (input order) partition the input. ``BatchLoadReport((),
+            ())`` for empty ``sources``.
+
+        Raises:
+            CoreError: If the core is not in RUNNING state.
         """
         ...
 

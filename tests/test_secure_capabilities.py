@@ -141,6 +141,8 @@ class TestDeclaredMode:
                 "register_plugin",
                 "unregister_plugin",
                 "load_plugin",
+                "load_plugins",
+                "try_load_plugins",
                 "get_plugin",
                 "start",
                 "stop",
@@ -278,6 +280,54 @@ class TestKernelLifecycleGrant:
             lc = await consumer.get_capability("kernel.lifecycle")
             await lc.load_plugin(source)
             assert await lc.get_plugin("loaded") is not None
+        finally:
+            await core.stop()
+
+    @pytest.mark.asyncio
+    async def test_facet_forwards_load_plugins(self):
+        """The grant forwards the atomic batch verb (RFC 0010 §4.6)."""
+        sources = [
+            (
+                "class BatchA(Plugin):\n    def __init__(self):\n        super().__init__(name='batch_a')\n",
+                None,
+            ),
+            (
+                "class BatchB(Plugin):\n    def __init__(self):\n        super().__init__(name='batch_b')\n",
+                None,
+            ),
+        ]
+        core = Core(capability_access="declared")
+        await core.start()
+        try:
+            consumer = LifecycleConsumer()
+            await core.register_plugin(consumer)
+            lc = await consumer.get_capability("kernel.lifecycle")
+            names = await lc.load_plugins(sources)
+            assert set(names) == {"batch_a", "batch_b"}
+            assert await lc.get_plugin("batch_a") is not None
+        finally:
+            await core.stop()
+
+    @pytest.mark.asyncio
+    async def test_facet_forwards_try_load_plugins(self):
+        """The grant forwards the best-effort batch verb, report and all (RFC 0010 §4.6)."""
+        from uxok.protocols import BatchLoadReport
+
+        good = "class TryGood(Plugin):\n    def __init__(self):\n        super().__init__(name='try_good')\n"
+        broken = "def not valid python ("
+        core = Core(capability_access="declared")
+        await core.start()
+        try:
+            consumer = LifecycleConsumer()
+            await core.register_plugin(consumer)
+            lc = await consumer.get_capability("kernel.lifecycle")
+            report = await lc.try_load_plugins([(good, "good.py"), (broken, "broken.py")])
+            assert isinstance(report, BatchLoadReport)
+            assert [name for name, _ in report.loaded] == ["try_good"]
+            assert [(s.origin, s.reason) for s in report.skipped] == [
+                ("broken.py", "materialize_error")
+            ]
+            assert await lc.get_plugin("try_good") is not None
         finally:
             await core.stop()
 

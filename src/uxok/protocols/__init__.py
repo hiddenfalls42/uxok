@@ -2,7 +2,12 @@
 
 from uxok.protocols._types import CoreState
 from uxok.protocols.config import CoreConfig
-from uxok.protocols.core import AdmissionResult, Core
+from uxok.protocols.core import (
+    AdmissionResult,
+    BatchLoadReport,
+    Core,
+    SkippedSource,
+)
 from uxok.protocols.events import Event
 from uxok.protocols.hooks import Hook
 from uxok.protocols.plugin import PluginMetadata, PluginProtocol
@@ -13,6 +18,7 @@ from uxok.protocols.plugin import PluginMetadata, PluginProtocol
 # They stay importable from their definition modules for internal kernel use.
 __all__ = [
     "AdmissionResult",
+    "BatchLoadReport",
     "Core",
     "CoreConfig",
     "CoreState",
@@ -20,4 +26,5 @@ __all__ = [
     "Hook",
     "PluginMetadata",
     "PluginProtocol",
+    "SkippedSource",
 ]

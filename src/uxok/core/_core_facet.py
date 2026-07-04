@@ -7,8 +7,9 @@ over the kernel is bounded by its manifest. The facet exposes the **tier-1 ambie
 surface (including descriptive ``list`` and the read-only ``check_plugin`` admission
 probe) and a **gated** ``get_capability``; it
 deliberately omits the graph-control (tier-2: ``register_plugin``/``unregister_plugin``/
-``load_plugin``/``get_plugin``) and host-only (tier-3: ``start``/``stop``) members, and
-the kernel internals (``_capability_system``, ``_plugin_configs``, ``_tick_scheduler``).
+``load_plugin``/``load_plugins``/``try_load_plugins``/``get_plugin``) and host-only (tier-3:
+``start``/``stop``) members, and the kernel internals (``_capability_system``,
+``_plugin_configs``, ``_tick_scheduler``).
 
 Like ``PluginView``, this wrapper has **no ``__getattr__`` passthrough** — a passthrough
 would re-expose everything and defeat the allow-list.
@@ -149,9 +150,12 @@ class LifecycleFacet:
 
     Graph control is deliberately absent from :class:`CoreFacet`; a plugin reaches it
     only by declaring ``kernel.lifecycle`` in ``requires`` and resolving it through
-    ``get_capability``, which returns this forwarder. It exposes exactly the four
-    graph-control methods and holds no other authority — the reserved capability the
-    kernel "provides" with no plugin instance and no bootstrap ordering.
+    ``get_capability``, which returns this forwarder. It exposes exactly the six
+    graph-control methods — ``register_plugin``, ``unregister_plugin``, ``load_plugin``,
+    ``load_plugins``, ``try_load_plugins``, ``get_plugin`` — and holds no other authority
+    (the batch pair was added by RFC 0010 so sealed-mode loaders can boot a graph in one
+    call). It is the reserved capability the kernel "provides" with no plugin instance and
+    no bootstrap ordering.
 
     Like the other facets it has no ``__getattr__`` passthrough and is not in
     ``uxok.__all__``. The forwarded methods return the **raw** Core results (live
@@ -170,6 +174,12 @@ class LifecycleFacet:
 
     async def load_plugin(self, *args: Any, **kwargs: Any) -> Any:
         return await self.__core.load_plugin(*args, **kwargs)
+
+    async def load_plugins(self, *args: Any, **kwargs: Any) -> Any:
+        return await self.__core.load_plugins(*args, **kwargs)
+
+    async def try_load_plugins(self, *args: Any, **kwargs: Any) -> Any:
+        return await self.__core.try_load_plugins(*args, **kwargs)
 
     async def get_plugin(self, *args: Any, **kwargs: Any) -> Any:
         return await self.__core.get_plugin(*args, **kwargs)

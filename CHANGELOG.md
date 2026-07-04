@@ -9,6 +9,21 @@ commit as its CHANGELOG entry.
 ## [Unreleased]
 
 ### Added
+- `Core.try_load_plugins(sources)` (RFC 0010): the best-effort sibling of `load_plugins`.
+  Backed by the same planner, it commits the **maximal loadable subgraph** and returns a
+  `BatchLoadReport` instead of ever raising `BatchLoadError`. Each faulting candidate — and
+  everything that transitively depends on it — is pruned and recorded in `report.skipped`
+  with a `reason` from a closed vocabulary (`materialize_error`, `duplicate_name`,
+  `live_name_collision`, `missing_capability`, `cycle_member`, `contract_failure`,
+  `duplicate_provider`, `max_plugins`, `dependent_of_skipped`, `on_start_error`);
+  `report.loaded` and `report.skipped` partition the input exactly. It never unregisters an
+  already-live plugin and never unwinds a committed candidate — rollback stays host policy.
+  New public data structures `BatchLoadReport` and `SkippedSource` (both
+  `@dataclass(frozen=True, slots=True)`, importable from `uxok.protocols`/`uxok.core`, not
+  top-level `uxok` exports). The `kernel.lifecycle` tier-2 grant now forwards both batch
+  verbs (`load_plugins`, `try_load_plugins`), so a sealed-mode loader can boot a graph in
+  one call — its enumerated surface grows from four graph-control methods to six.
+  `docs/manifests/API.md` §2.2, §3.2, §7.7, §7.8, and §11 updated in this commit.
 - `Core.load_plugins(sources)` (RFC 0008): boots a batch of `(code, origin)` plugin
   sources in one call, computing load order from the candidates' `provides`/`requires`
   and committing them together under a single hold of the lifecycle lock. Returns plugin

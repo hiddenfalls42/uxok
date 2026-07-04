@@ -225,9 +225,12 @@ and computes a topological order so every provider starts before the plugins tha
 require it — then commits the whole batch under a single hold of the lifecycle lock.
 A malformed graph fails as a unit: a missing capability or a dependency cycle raises
 `BatchLoadError` in the *plan* phase, before any plugin is registered, so a bad graph
-never leaves half a system running. See
+never leaves half a system running. When you would rather boot whatever resolves and
+collect the rest — a folder of independently authored plugins where one bad file must
+not empty the boot — reach for the best-effort sibling `core.try_load_plugins()`, which
+returns a skip report instead of raising. See
 [boot a plugin graph in order](../how-to/how-to-boot-a-plugin-graph-in-order.md)
-for the rollback recipes and the lower-level manual alternative.
+for both verbs, the rollback recipes, and the lower-level manual alternative.
 
 `main()` subscribes `_stop` to `"conversation.over"` *before* loading the plugins,
 then waits on an `asyncio.Event` the handler sets. Loading the agent starts it, so

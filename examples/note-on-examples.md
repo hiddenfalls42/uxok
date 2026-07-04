@@ -1,14 +1,17 @@
-`example_host/` is the modular, extended counterpart to the README quick-start: a
-small conversational-agent program, one plugin per module, that wires the kernel
-features a real host leans on — the event bus (`user.says` → `agent.says`), a hook
-extension point (`persona`), a capability provider/consumer (`llm`, resolved by
-name and never imported), batch source-loading boot (`core.load_plugins`, importing
-no plugin class), **hot reload** (the host swaps the persona live, from a sibling
-module's source), and graceful shutdown.
+`example_host/` is the destination of the tutorial series: a small
+conversational-agent program, one plugin per module, that wires the kernel features
+a real host leans on — batch source-loading boot (`core.load_plugins`, importing no
+plugin class, all or nothing), a cid-correlated conversation over the event bus (no
+sleeps), two competing **typed** `llm` providers selected by tag from config
+(`ConfigField`/`REQUIRED`), a stateful `persona` hook whose reply count survives
+**hot reload** (`get_state`/`restore_state`), a watcher that hot-loads edited plugin
+files from disk, a roster mirroring every graph change, a supervisor consuming the
+kernel's error signals, and graceful shutdown — all under
+`capability_access="sealed"`.
 
 Run it with `python -m examples.example_host.host`; `tests/test_example_host.py`
-is its acceptance suite and runs the whole graph under both `capability_access`
-modes.
+is its acceptance suite and runs the whole graph under all three
+`capability_access` modes.
 
 `getting_started/` is the minimal counterpart — the same Model / Agent / persona-hook
 conversation, two plugins and a host that **hot-loads both from source** (importing

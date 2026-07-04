@@ -267,10 +267,12 @@ connect them at runtime.
 
 ## Next steps
 
-For the same conversation with the features a real host leans on — a persona as its
-own hot-reloadable plugin, live plugin swapping, and signal-driven shutdown — read
+For the same conversation with the features a real host leans on — a persona whose
+state survives live hot-swaps, competing model providers selected by config, a
+watcher that hot-loads edited plugin files, a supervisor consuming the kernel's
+error signals, and signal-driven shutdown — read
 [`examples/example_host/`](https://github.com/hiddenfalls42/uxok/tree/main/examples/example_host),
-the fuller sibling of this starter.
+the destination this starter grows into.
 
 To go deeper on any one primitive:
 

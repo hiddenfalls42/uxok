@@ -778,6 +778,14 @@ There is no `HookError` or `EventError`: a per-subsystem exception with neither 
 site nor a catch site anywhere in the codebase is not API. Hook failures isolate to the
 `core.hook_error` event (see [§12](#12-framework-event-contracts)), not an exception.
 
+The hierarchy above is reserved for *domain* faults — conditions tied to core, plugin,
+or capability runtime state that a host catches per the [§1](#1-top-level-public-exports)
+"catch it" list. Local, immediate input validation raises the matching stdlib exception
+instead: `ValueError` for a bad argument shape, `KeyError` for an unknown hook or enum
+name, `AttributeError` for a missing attribute. Those signal a caller bug to fix before
+calling again, not a runtime condition to recover from, so they stay outside this
+surface by design.
+
 Constructors:
 
 - `CoreError`, `PluginError`, `StalePluginError`: no custom `__init__` — standard `Exception(*args)`.

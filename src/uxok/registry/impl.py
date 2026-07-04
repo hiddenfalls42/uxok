@@ -9,6 +9,7 @@ from uxok.core._shared_utils import (
     format_plugin_error,
     log_op,
 )
+from uxok.errors import CoreError, PluginError
 from uxok.utils import topo_sort
 
 if TYPE_CHECKING:
@@ -68,8 +69,6 @@ class _Registry:
         Raises:
             PluginError: If plugin validation fails
         """
-        from uxok.errors import PluginError
-
         plugin_id = plugin.metadata.id
         plugin_name = plugin.metadata.name
 
@@ -161,8 +160,6 @@ class _Registry:
         Raises:
             PluginError: If other plugins depend on this one (unless force=True)
         """
-        from uxok.errors import PluginError
-
         if plugin_id not in self._plugins:
             raise PluginError(format_plugin_error(str(plugin_id), "not found"))
 
@@ -226,8 +223,6 @@ class _Registry:
             PluginError: If plugin_id not found, names don't match, a
                 dependency is missing, or the new edges form a cycle
         """
-        from uxok.errors import PluginError
-
         if plugin_id not in self._plugins:
             raise PluginError(format_plugin_error(str(plugin_id), "not found"))
 
@@ -264,8 +259,6 @@ class _Registry:
         will be, then installs the new edges; restores the old edges on
         failure. Synchronous critical section — no await (lock-free invariant).
         """
-        from uxok.errors import PluginError
-
         for dep_id in dependencies:
             if dep_id not in self._plugins:
                 raise PluginError(
@@ -370,8 +363,6 @@ class _Registry:
         ordered, unresolved = topo_sort(nodes, self._dependencies)
 
         if unresolved:
-            from uxok.errors import CoreError
-
             on_cycle = sorted(
                 p.metadata.name if (p := self._plugins.get(pid)) else str(pid) for pid in unresolved
             )
@@ -401,8 +392,6 @@ class _Registry:
         Raises:
             PluginError: If the proposed edges would close a cycle
         """
-        from uxok.errors import PluginError
-
         visited: set[PluginId] = set()
         stack: list[PluginId] = list(dependencies)
         while stack:

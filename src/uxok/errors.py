@@ -1,4 +1,12 @@
-"""Error hierarchy for the core system."""
+"""Error hierarchy for the core system.
+
+The classes below cover *domain* faults — core/plugin/capability runtime state
+that the host catches per the §1 "catch it" guidance. Local, immediate input
+validation (a bad argument shape, an unknown hook or enum name, a missing
+attribute) raises the matching stdlib exception (`ValueError`, `KeyError`,
+`AttributeError`) instead; those signal a caller bug to fix before calling
+again, not a domain condition to handle at runtime.
+"""
 
 __all__ = [
     "BatchLoadError",

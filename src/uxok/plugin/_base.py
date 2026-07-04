@@ -9,6 +9,7 @@ from dataclasses import replace
 from typing import TYPE_CHECKING, Any, TypeVar, overload
 from uuid import uuid4
 
+from uxok.errors import PluginError
 from uxok.plugin._decorators import discover_decorated_methods
 from uxok.plugin._naming import detect_plugin_name, validate_plugin_name
 from uxok.plugin.config_field import REQUIRED
@@ -293,8 +294,6 @@ class Plugin(PluginProtocol):
             return
 
         if self._shutdown:
-            from uxok.errors import PluginError
-
             raise PluginError(
                 f"Plugin '{self._metadata.name}' was already stopped; plugin instances "
                 "are one-shot — create a fresh instance to register again "
@@ -416,8 +415,6 @@ class Plugin(PluginProtocol):
 
     def _validate_config_schema(self) -> None:
         """Validate plugin config against declared schema. Called at start()."""
-        from uxok.errors import PluginError
-
         scoped = self.__core_real._plugin_configs.get(self._metadata.name, {})  # type: ignore[attr-defined]
         errors = []
 

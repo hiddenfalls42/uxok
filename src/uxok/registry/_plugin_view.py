@@ -14,6 +14,8 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Literal
 from uuid import UUID
 
+from uxok.errors import StalePluginError
+
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
@@ -136,8 +138,6 @@ class PluginView:
         Raises:
             StalePluginError: If the plugin is no longer resolvable.
         """
-        from uxok.errors import StalePluginError
-
         obj = await self._get_object()
         if obj is None:
             raise StalePluginError(
@@ -161,7 +161,6 @@ class PluginView:
         Raises:
             StalePluginError: If the plugin is no longer resolvable.
         """
-        from uxok.errors import StalePluginError
         from uxok.utils import get_instance_methods
 
         obj = await self._get_object()
@@ -402,8 +401,6 @@ class PluginCollection:
         are excluded from the result rather than propagating the error, since
         a collection filter should not fail due to a single stale entry.
         """
-        from uxok.errors import StalePluginError
-
         result: list[PluginView] = []
         for p in self._plugins:
             try:

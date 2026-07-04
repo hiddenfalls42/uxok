@@ -41,6 +41,12 @@ commit as its CHANGELOG entry.
   rollback-or-keep policy. `docs/manifests/API.md` §2.2 and §8 updated in this commit.
 
 ### Changed
+- Documentation: `docs/manifests/API.md` §8 and `errors.py`'s module docstring now state the
+  stdlib-vs-custom-exception rule explicitly — local, immediate input validation (bad
+  argument shape, unknown hook/enum name, missing attribute) raises the matching stdlib
+  exception (`ValueError`, `KeyError`, `AttributeError`); the `uxok.errors` hierarchy is
+  reserved for domain faults tied to core/plugin/capability runtime state. **No runtime
+  behavior change**: this codifies existing practice, it does not alter any raise site.
 - Shared `topo_sort` (`utils/_helpers.py`) is now order-preserving: ties break by input
   order instead of by hash-set iteration, so its output is a deterministic function of the
   input. This also makes `registry.load_order()` — and therefore `Core.stop()` teardown

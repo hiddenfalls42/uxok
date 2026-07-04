@@ -360,10 +360,14 @@ class _Registry:
         Returns:
             List of plugin IDs in dependency order
         """
+        # Iterate registration (insertion) order so topo_sort's ties break
+        # deterministically; a set here would reintroduce hash-order teardown.
         if plugin_ids is None:
-            plugin_ids = set(self._plugins.keys())
+            nodes: list[PluginId] = list(self._plugins)
+        else:
+            nodes = [pid for pid in self._plugins if pid in plugin_ids]
 
-        ordered, unresolved = topo_sort(plugin_ids, self._dependencies)
+        ordered, unresolved = topo_sort(nodes, self._dependencies)
 
         if unresolved:
             from uxok.errors import CoreError

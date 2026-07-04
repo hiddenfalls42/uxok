@@ -616,9 +616,10 @@ class Core(CoreProtocol):
 
         Pure, synchronous, lock-free (RFC 0008 §4.3): every capability-system
         read used here (``missing_requirements``, ``provides_conflicts``,
-        ``_resolve_collision_policy``) is itself synchronous, so this method
-        holds no lock and contains no ``await`` — the same lock-free invariant
-        the registry/capability-system mutations honor (decision record #12).
+        ``contract_error``, ``collision_policy``) is itself synchronous, so this
+        method holds no lock and contains no ``await`` — the same lock-free
+        invariant the registry/capability-system mutations honor (decision
+        record #12).
 
         Checks run in this order; the first fault found raises a plan-phase
         ``BatchLoadError`` and nothing is committed (``installed`` stays the
@@ -628,12 +629,15 @@ class Core(CoreProtocol):
         2. A candidate's ``name`` collides with a live plugin — batch loading
            is fresh-load-only (RFC 0008 §4.7); a name that already exists must
            go through :meth:`load_plugin` to hot-reload.
-        3. (only when ``capability_collision == "error_on_conflict"``) a
+        3. The batch would push the plugin count over ``max_plugins``.
+        4. (only when ``capability_collision == "error_on_conflict"``) a
            candidate's provided capability collides with a live provider, or
            with another candidate in the batch.
-        4. A candidate's missing requirement has no in-batch provider and no
+        5. A candidate provides a typed capability whose declared protocol it
+           does not implement (a pure per-candidate contract failure).
+        6. A candidate's missing requirement has no in-batch provider and no
            live provider.
-        5. A cycle in the resulting candidate dependency graph.
+        7. A cycle in the resulting candidate dependency graph.
 
         Args:
             candidates: Materialized ``(instance, name)`` pairs, none yet
@@ -642,10 +646,14 @@ class Core(CoreProtocol):
                 the caller before planning.
 
         Returns:
-            ``candidates`` reordered into a valid topological commit order —
-            every candidate that provides a capability another candidate
-            requires precedes every candidate that requires it (consumer
-            after ALL in-batch providers, RFC 0008 §4.3).
+            ``candidates`` reordered into a valid topological commit order. For
+            any capability that has **no** live provider, every in-batch
+            provider of it precedes every in-batch consumer (consumer after ALL
+            in-batch providers, RFC 0008 §4.3). When a capability is already
+            live-satisfied no ordering edge is drawn — the consumer may commit
+            before an in-batch provider of the same capability, which is
+            correct because the live provider already satisfies the requirement.
+            Ties break by input order (deterministic; see :func:`topo_sort`).
 
         Raises:
             BatchLoadError: ``phase="plan"``, for any of the faults above.
@@ -665,32 +673,53 @@ class Core(CoreProtocol):
                 raise BatchLoadError(phase="plan", cause=cause, failed=name) from cause
             by_name[name] = instance
 
+        # max_plugins overflow is knowable now — a batch-size fault, not
+        # attributable to one candidate, so fail here rather than partway
+        # through commit with a partial install (registry gates the same value).
+        ceiling = self._core_config.max_plugins
+        if ceiling is not None and len(live_names) + len(by_name) > ceiling:
+            cause = PluginError(
+                f"max_plugins limit ({ceiling}) would be exceeded: "
+                f"{len(live_names)} live + {len(by_name)} in batch"
+            )
+            raise BatchLoadError(phase="plan", cause=cause, failed=None) from cause
+
         providers: dict[str, list[str]] = {}
         for name, instance in by_name.items():
             for capability in instance.metadata.provides:
                 providers.setdefault(capability, []).append(name)
 
-        if caps._resolve_collision_policy() == "error_on_conflict":
+        if caps.collision_policy == "error_on_conflict":
             for name, instance in by_name.items():
                 live_conflicts = caps.provides_conflicts(instance)
                 if live_conflicts:
                     capability = sorted(live_conflicts)[0]
-                    cause = caps._collision_error(capability, caps._capabilities[capability])
+                    cause = caps.collision_error(capability, caps.providers_of(capability))
                     raise BatchLoadError(phase="plan", cause=cause, failed=name) from cause
 
             for capability, providing_names in providers.items():
                 if len(providing_names) > 1:
-                    cause = caps._collision_error(capability, [by_name[n] for n in providing_names])
+                    cause = caps.collision_error(capability, [by_name[n] for n in providing_names])
                     raise BatchLoadError(phase="plan", cause=cause, failed=None) from cause
+
+        # Contract failures are a pure function of the candidate alone (zero
+        # TOCTOU), so front-load them here rather than letting a provider that
+        # declares a Protocol it doesn't implement fail mid-commit.
+        for name, instance in by_name.items():
+            contract_error = caps.contract_error(instance)
+            if contract_error is not None:
+                raise BatchLoadError(phase="plan", cause=contract_error, failed=name) from (
+                    contract_error
+                )
 
         deps: dict[str, set[str]] = {name: set() for name in by_name}
         for name, instance in by_name.items():
-            for capability in caps.missing_requirements(instance):
+            for capability in sorted(caps.missing_requirements(instance)):
                 in_batch_providers = providers.get(capability)
                 if in_batch_providers:
                     deps[name].update(in_batch_providers)
                 else:
-                    available = sorted(set(caps._capabilities) | set(providers))
+                    available = sorted(set(caps.live_capability_names()) | set(providers))
                     cause = MissingCapabilityError(
                         [capability], phase="plan", available=available, requirer=name
                     )
@@ -718,14 +747,16 @@ class Core(CoreProtocol):
         2. **Plan** — :meth:`_plan_batch_order` computes a topological commit
            order from the candidates' declared ``provides``/``requires`` plus
            a snapshot of already-live providers. Pure computation; every
-           graph-shape fault (cycle, missing capability, duplicate name, and —
-           under ``error_on_conflict`` — duplicate provider) is caught here,
+           statically-decidable fault (cycle, missing capability, duplicate
+           name, ``max_plugins`` overflow, a protocol-contract failure, and —
+           under ``error_on_conflict`` — a duplicate provider) is caught here,
            so a plan-phase failure leaves the registry untouched.
         3. **Commit** — the whole plan is installed under one hold of the
            reentrant lifecycle lock via :meth:`_register_plugin_now`, in plan
            order. Because the plan orders providers before their consumers,
            each candidate's ``requires`` is already satisfied at its own
-           admission.
+           admission. The only fault that can surface here is a candidate's own
+           ``on_start()`` raising (or a TOCTOU loss re-detected under the lock).
 
         Fresh-load-only (RFC 0008 §4.7): every source becomes a brand-new
         registration. A source whose plugin name matches an already-live
@@ -768,7 +799,7 @@ class Core(CoreProtocol):
             raise CoreError("Core must be started before loading plugins")
 
         candidates: list[tuple[PluginProtocol, str]] = []
-        for code, origin in list(sources):
+        for index, (code, origin) in enumerate(sources):
             try:
                 instance, name = await self._materialize_plugin(code, origin)
             except Exception as e:
@@ -776,7 +807,11 @@ class Core(CoreProtocol):
                 # bad Plugin subclass count, or the plugin's own __init__ raising
                 # — is a plan-phase fault: nothing has been committed, so the
                 # host gets a structured BatchLoadError, not a raw exception.
-                raise BatchLoadError(phase="plan", cause=e, failed=origin) from e
+                # Fall back to a positional sentinel when the source is
+                # anonymous so a host can still locate the offending entry
+                # (``failed=None`` is reserved for graph-wide faults).
+                failed = origin if origin is not None else f"sources[{index}]"
+                raise BatchLoadError(phase="plan", cause=e, failed=failed) from e
             candidates.append((instance, name))
 
         live_names = frozenset(p.metadata.name for p in (await self._registry.all()).values())
@@ -785,7 +820,7 @@ class Core(CoreProtocol):
 
         installed: list[str] = []
         async with self._lifecycle_lock:
-            for instance, _name in ordered:
+            for instance, name in ordered:
                 try:
                     await self._register_plugin_now(instance)
                 except Exception as e:
@@ -793,9 +828,9 @@ class Core(CoreProtocol):
                         phase="commit",
                         cause=e,
                         installed=tuple(installed),
-                        failed=instance.metadata.name,
+                        failed=name,
                     ) from e
-                installed.append(instance.metadata.name)
+                installed.append(name)
 
         return tuple(installed)
 

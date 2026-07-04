@@ -138,6 +138,21 @@ class ExplodingPlugin(Plugin):
         raise ValueError("boom from constructor")
 """
 
+# A provider that declares a typed capability (a Protocol) but never implements
+# its method. contract_failures() is a pure function of this candidate alone —
+# zero TOCTOU — so the plan phase can reject it before any commit (H-002).
+CONTRACT_FAILURE_SRC = """
+from typing import Protocol, runtime_checkable
+
+@runtime_checkable
+class Greeter(Protocol):
+    def greet(self) -> str: ...
+
+class BadGreeterPlugin(Plugin):
+    def __init__(self, **kw):
+        super().__init__(name="bad_greeter", provides={Greeter}, **kw)
+"""
+
 
 @pytest_asyncio.fixture
 async def conflict_core() -> AsyncGenerator[Core, None]:
@@ -334,14 +349,17 @@ class TestPlanPhaseErrors:
         assert await started_core._registry.all() == {}
 
     @pytest.mark.asyncio
-    async def test_materialize_failure_without_origin_has_no_failed_name(self, started_core: Core):
+    async def test_materialize_failure_without_origin_uses_positional_sentinel(
+        self, started_core: Core
+    ):
+        """An anonymous source gets a ``sources[N]`` handle, not an ambiguous None."""
         with pytest.raises(BatchLoadError) as excinfo:
-            await started_core.load_plugins([(BROKEN_SYNTAX_SRC, None)])
+            await started_core.load_plugins([(STORAGE_SRC, None), (BROKEN_SYNTAX_SRC, None)])
 
         err = excinfo.value
         assert err.phase == "plan"
         assert err.installed == ()
-        assert err.failed is None
+        assert err.failed == "sources[1]"
         assert await started_core._registry.all() == {}
 
     @pytest.mark.asyncio
@@ -499,3 +517,110 @@ class TestBatchLoadErrorShape:
 
         assert excinfo.value.__cause__ is excinfo.value.cause
         assert excinfo.value.__cause__ is cause
+
+
+class TestStaticFaultsFailInPlanPhase:
+    """RFC 0008 §4.8: every statically-decidable fault is front-loaded to plan.
+
+    Contract failures (H-002) and max_plugins overflow (M-001) are knowable
+    without committing anything, so they must fail in "plan" with an empty
+    registry — not partway through the commit loop with a partial install.
+    """
+
+    @pytest.mark.asyncio
+    async def test_contract_failure_candidate_fails_in_plan_phase(self, started_core: Core):
+        """A provider missing its declared protocol method plan-fails; nothing commits."""
+        with pytest.raises(BatchLoadError) as excinfo:
+            await started_core.load_plugins([(STORAGE_SRC, None), (CONTRACT_FAILURE_SRC, None)])
+
+        err = excinfo.value
+        assert err.phase == "plan"
+        assert err.installed == ()
+        assert err.failed == "bad_greeter"
+        assert isinstance(err.__cause__, PluginError)
+        assert "does not implement" in str(err.__cause__)
+        # Zero partial state: the well-formed sibling never committed either.
+        assert await started_core._registry.all() == {}
+
+    @pytest.mark.asyncio
+    async def test_max_plugins_overflow_fails_in_plan_phase(self):
+        """A batch that would exceed max_plugins plan-fails, not mid-commit."""
+        core = Core(max_plugins=1)
+        await core.start()
+        try:
+            with pytest.raises(BatchLoadError) as excinfo:
+                await core.load_plugins([(STORAGE_SRC, None), (AUTH_SRC, None)])
+
+            err = excinfo.value
+            assert err.phase == "plan"
+            assert err.installed == ()
+            assert err.failed is None
+            assert isinstance(err.__cause__, PluginError)
+            assert "max_plugins" in str(err.__cause__)
+            assert await core._registry.all() == {}
+        finally:
+            if core.state is CoreState.RUNNING:
+                await core.stop()
+
+    @pytest.mark.asyncio
+    async def test_max_plugins_overflow_counts_already_live_plugins(self):
+        """The ceiling check sums live + in-batch, so one live + one batch overflows a cap of 1."""
+        core = Core(max_plugins=1)
+        await core.start()
+        try:
+            await core.load_plugin(STORAGE_SRC)
+
+            with pytest.raises(BatchLoadError) as excinfo:
+                await core.load_plugins([(AUTH_SRC, None)])
+
+            assert excinfo.value.phase == "plan"
+            assert await core.get_plugin("storage") is not None
+            assert await core.get_plugin("auth") is None
+        finally:
+            if core.state is CoreState.RUNNING:
+                await core.stop()
+
+
+class TestLiveAndInBatchProviderOverlap:
+    """L-002: a capability satisfied by BOTH a live and an in-batch provider is fine.
+
+    missing_requirements() skips live-satisfied capabilities, so no ordering
+    edge is drawn to the in-batch provider and no spurious cycle appears — the
+    consumer admits because the live provider already satisfies it.
+    """
+
+    @pytest.mark.asyncio
+    async def test_consumer_admits_when_capability_is_both_live_and_in_batch(
+        self, started_core: Core
+    ):
+        await started_core.load_plugin(STORAGE_SRC)  # live provider of "storage"
+
+        storage_dup = _source("storage_dup", provides=frozenset({"storage"}))
+        consumer = _source("index", provides=frozenset({"index"}), requires=frozenset({"storage"}))
+
+        result = await started_core.load_plugins([(consumer, None), (storage_dup, None)])
+
+        assert set(result) == {"index", "storage_dup"}
+        assert await started_core.get_plugin("index") is not None
+        assert await started_core.get_plugin("storage_dup") is not None
+
+
+class TestCommitOrderDeterminism:
+    """H-001: the committed order is a pure function of the sources, not PYTHONHASHSEED."""
+
+    @pytest.mark.asyncio
+    async def test_same_source_order_yields_identical_commit_order(self):
+        """Loading the same source order into fresh cores gives byte-identical results."""
+        sources = shuffled_graph_sources(seed=4)
+
+        orders = []
+        for _ in range(3):
+            core = Core()
+            await core.start()
+            try:
+                orders.append(await core.load_plugins(sources))
+            finally:
+                await core.stop()
+
+        assert orders[0] == orders[1] == orders[2]
+        assert_topological_order(orders[0])

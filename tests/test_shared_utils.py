@@ -2,6 +2,8 @@ import asyncio
 import logging
 
 import pytest
+from hypothesis import given
+from hypothesis import strategies as st
 
 from uxok.core._shared_utils import (
     drain_plugin_resources,
@@ -296,3 +298,47 @@ def test_topo_sort_deterministic():
     first, _ = topo_sort(nodes, deps)
     second, _ = topo_sort(nodes, deps)
     assert first == second
+
+
+def test_topo_sort_independent_nodes_preserve_input_order():
+    """Unconstrained nodes come out in input order, never hash order (H-001)."""
+    nodes = ["echo", "delta", "charlie", "bravo", "alpha"]
+    ordered, unresolved = topo_sort(nodes, {n: set() for n in nodes})
+    assert unresolved == set()
+    assert ordered == nodes
+
+
+def test_topo_sort_ties_break_by_input_order_under_constraints():
+    """A shared dependency is placed first; its independent dependents keep input order."""
+    nodes = ["root", "zulu", "yankee", "xray"]
+    deps = {"zulu": {"root"}, "yankee": {"root"}, "xray": {"root"}, "root": set()}
+    ordered, _ = topo_sort(nodes, deps)
+    assert ordered == ["root", "zulu", "yankee", "xray"]
+
+
+def test_topo_sort_output_is_pure_function_of_input_order():
+    """Reordering the input reorders independent siblings predictably (not by seed)."""
+    deps = {"a": {"b", "c"}, "b": set(), "c": set(), "d": {"a"}}
+    forward, _ = topo_sort(["b", "c", "a", "d"], deps)
+    assert forward.index("b") < forward.index("c")
+    reversed_siblings, _ = topo_sort(["c", "b", "a", "d"], deps)
+    assert reversed_siblings.index("c") < reversed_siblings.index("b")
+
+
+@given(st.lists(st.integers(min_value=0, max_value=50), unique=True, max_size=12))
+def test_topo_sort_independent_nodes_property(nodes):
+    """Property: with no dependencies, output is exactly the input order, every run."""
+    ordered, unresolved = topo_sort(nodes, {n: set() for n in nodes})
+    assert unresolved == set()
+    assert ordered == nodes
+
+
+@given(st.lists(st.integers(min_value=0, max_value=50), unique=True, min_size=1, max_size=10))
+def test_topo_sort_chain_is_pure_and_valid_property(nodes):
+    """Property: a chain built from input order sorts to a stable, valid reverse order."""
+    # Each node depends on its predecessor in the input list → a strict chain.
+    deps = {node: ({nodes[i - 1]} if i else set()) for i, node in enumerate(nodes)}
+    first, unresolved = topo_sort(nodes, deps)
+    assert unresolved == set()
+    assert first == nodes  # dependency-before-dependent already matches input order
+    assert topo_sort(nodes, deps)[0] == first  # pure function: repeat calls agree

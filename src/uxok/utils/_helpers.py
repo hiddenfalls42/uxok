@@ -118,20 +118,25 @@ def topo_sort[T: Hashable](
 
     Returns:
         A `(ordered, unresolved)` tuple. `ordered` is a valid topological order
-        of `nodes` (dependencies before dependents). `unresolved` is the set of
-        nodes that could not be placed because they participate in, or depend
-        on, a cycle; it is nonempty exactly when `nodes` contains a cycle. This
-        function never raises on a cycle — the caller decides how to report it.
+        of `nodes` (dependencies before dependents). Ties — nodes with no
+        ordering constraint between them — break by input order, so `ordered`
+        is a pure deterministic function of the arguments, independent of
+        `PYTHONHASHSEED`. `unresolved` is the set of nodes that could not be
+        placed because they participate in, or depend on, a cycle; it is
+        nonempty exactly when `nodes` contains a cycle. This function never
+        raises on a cycle — the caller decides how to report it.
     """
-    node_set = set(nodes)
+    # dict.fromkeys preserves input order and dedupes; set() would reintroduce
+    # hash-order nondeterminism into `ordered` (the property this sort promises).
+    node_set = dict.fromkeys(nodes)
     in_degree = dict.fromkeys(node_set, 0)
-    graph: dict[T, set[T]] = {node: set() for node in node_set}
+    graph: dict[T, list[T]] = {node: [] for node in node_set}
 
     for node in node_set:
-        deps = dependencies.get(node, set()) & node_set
-        for dep in deps:
-            graph[dep].add(node)
-            in_degree[node] += 1
+        for dep in dependencies.get(node, ()):
+            if dep in node_set and node not in graph[dep]:
+                graph[dep].append(node)
+                in_degree[node] += 1
 
     ordered: list[T] = []
     queue = [node for node, degree in in_degree.items() if degree == 0]
@@ -144,7 +149,7 @@ def topo_sort[T: Hashable](
             if in_degree[dependent] == 0:
                 queue.append(dependent)
 
-    unresolved = node_set - set(ordered)
+    unresolved = set(node_set) - set(ordered)
     return ordered, unresolved
 
 

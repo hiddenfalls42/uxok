@@ -12,13 +12,24 @@ commit as its CHANGELOG entry.
 - `Core.load_plugins(sources)` (RFC 0008): boots a batch of `(code, origin)` plugin
   sources in one call, computing load order from the candidates' `provides`/`requires`
   and committing them together under a single hold of the lifecycle lock. Returns plugin
-  names in commit order; fresh-load-only (no hot-reload in a batch). On failure raises
-  the new `BatchLoadError` (`PluginError` subclass), which carries `phase` (`"plan"` |
-  `"commit"`), `cause`, `installed` (the committed prefix, in commit order), and `failed`
-  so the host can implement its own rollback-or-keep policy. `docs/manifests/API.md` §2.2
-  and §8 updated in this commit.
+  names in commit order; fresh-load-only (no hot-reload in a batch). Commit order breaks
+  ties by source order, so it is a deterministic function of the input (independent of
+  `PYTHONHASHSEED`). Every statically-decidable fault — cycle, missing capability,
+  duplicate name, `max_plugins` overflow, protocol-contract failure, and (under
+  `error_on_conflict`) duplicate provider — is caught in the `"plan"` phase with an empty
+  registry; a `"commit"`-phase failure is a candidate's own `on_start()` raising (or a
+  plan→commit TOCTOU re-detected under the lock, which degrades rather than corrupting). On failure raises the new `BatchLoadError` (`PluginError` subclass), which
+  carries `phase` (`"plan"` | `"commit"`), `cause`, `installed` (the committed prefix, in
+  commit order), and `failed` — the offending candidate's origin, plugin name, or a
+  `"sources[N]"` positional sentinel for an anonymous source that fails to materialize
+  (`None` only for graph-wide faults) — so the host can implement its own
+  rollback-or-keep policy. `docs/manifests/API.md` §2.2 and §8 updated in this commit.
 
 ### Changed
+- Shared `topo_sort` (`utils/_helpers.py`) is now order-preserving: ties break by input
+  order instead of by hash-set iteration, so its output is a deterministic function of the
+  input. This also makes `registry.load_order()` — and therefore `Core.stop()` teardown
+  order among independent plugins — deterministic (registration order, reversed).
 - Capability-collision error message: under `capability_collision="error_on_conflict"`, a
   rejected second provider now raises `PluginError` with
   `Capability '<name>' is already provided by: <providers> (capability_collision policy is

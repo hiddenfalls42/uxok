@@ -83,12 +83,21 @@ class BatchLoadError(PluginError):
     Carries how far the boot got (``installed``, in commit order) so the host
     can enforce its own rollback-or-keep policy instead of introspecting the
     registry. ``phase`` discriminates the two failure classes: ``"plan"`` is a
-    pre-commit, graph-wide fault (cycle, missing capability, duplicate
-    provider/name, materialize/compile failure) where ``installed`` is always
-    empty; ``"commit"`` is a failure partway through installing the plan,
-    where ``installed`` lists everything committed before the failing
-    candidate. ``failed`` is the offending candidate's origin/name, or
-    ``None`` for graph-wide faults such as a cycle.
+    pre-commit fault — cycle, missing capability, duplicate provider/name,
+    protocol-contract failure, ``max_plugins`` overflow, or a
+    materialize/compile failure — where ``installed`` is always empty;
+    ``"commit"`` is a failure partway through installing the plan, where
+    ``installed`` lists everything committed before the failing candidate.
+    Because every statically-decidable fault is caught in the plan phase, a
+    commit-phase failure is almost always a candidate's own ``on_start()``
+    raising — the only other case is a plan→commit TOCTOU (a concurrent
+    registration between the plan snapshot and the lock) re-detected under the
+    lock, which also degrades here rather than corrupting the registry.
+    ``failed`` names the offending candidate — its origin, its plugin name, or
+    a ``"sources[N]"`` positional sentinel when an anonymous source fails to
+    materialize — and is ``None`` only for graph-wide faults not attributable
+    to one candidate (a cycle, a duplicate-provider collision, ``max_plugins``
+    overflow).
     """
 
     def __init__(

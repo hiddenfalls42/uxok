@@ -107,6 +107,27 @@ class CapabilitySystem:
             f"(capability_collision policy is 'error_on_conflict')"
         )
 
+    # --- Public read-only seam (used by Core._plan_batch_order) -----------------
+    # Read-only accessors so the planner never reaches into private state; policy
+    # stays centralized here, not duplicated in Core.
+
+    @property
+    def collision_policy(self) -> str:
+        """The active collision policy (unknown values default safely)."""
+        return self._resolve_collision_policy()
+
+    def collision_error(self, capability: str, providers: list[Any]) -> PluginError:
+        """Build the collision PluginError for a capability and its providers."""
+        return self._collision_error(capability, providers)
+
+    def providers_of(self, capability: str) -> list[Any]:
+        """Live plugin instances providing ``capability`` (empty if none)."""
+        return list(self._capabilities.get(capability, ()))
+
+    def live_capability_names(self) -> list[str]:
+        """Sorted names of all capabilities with a live provider."""
+        return sorted(self._capabilities)
+
     def _protocol_contract_violation(self, plugin: Any, protocol: type) -> str | None:
         """Return why ``plugin`` fails the ``protocol`` contract, or ``None``.
 
@@ -317,6 +338,26 @@ class CapabilitySystem:
             if self._protocol_contract_violation(plugin, protocol) is not None
         )
 
+    def contract_error(self, plugin: Any) -> PluginError | None:
+        """Return the protocol-contract PluginError for a candidate, or None.
+
+        Non-raising counterpart to the contract branch of
+        :meth:`raise_admission_error`, letting the batch planner detect a
+        contract failure pre-commit while reusing the exact validator (so probe
+        and commit messages cannot drift). Names the lexicographically first
+        failing capability, matching the enforcer's precedence.
+        """
+        failures = self.contract_failures(plugin)
+        if not failures:
+            return None
+        cap = sorted(failures)[0]
+        protocol = plugin._capability_protocols[cap]
+        try:
+            self._validate_protocol_contract(plugin, cap, protocol)
+        except PluginError as exc:
+            return exc
+        return None
+
     def raise_admission_error(self, plugin: Any, admission: AdmissionResult) -> None:
         """Raise the established registration error for a failed capability admission.
 
@@ -333,9 +374,9 @@ class CapabilitySystem:
                 requirer=plugin.metadata.name,
             )
         if admission.contract_failures:
-            cap = sorted(admission.contract_failures)[0]
-            protocol = plugin._capability_protocols[cap]
-            self._validate_protocol_contract(plugin, cap, protocol)
+            error = self.contract_error(plugin)
+            if error is not None:
+                raise error
         if admission.provides_conflicts:
             cap = sorted(admission.provides_conflicts)[0]
             raise self._collision_error(cap, self._capabilities[cap])

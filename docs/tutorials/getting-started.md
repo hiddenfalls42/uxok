@@ -163,8 +163,8 @@ priority order — a pipeline rather than a single answer.
 
 Rather than importing plugin classes or naming them in dependency order, it hands
 every plugin module's source to ``core.load_plugins`` and lets the kernel work out
-the load order from each plugin's declared capabilities. Run it with
-``python -m examples.getting_started.host``.
+the load order from each plugin's declared capabilities. Run it as a module:
+``python -m <package>.host``.
 """
 
 from __future__ import annotations

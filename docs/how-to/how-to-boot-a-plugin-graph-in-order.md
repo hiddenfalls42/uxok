@@ -34,7 +34,7 @@ except BatchLoadError as e:
     names = e.installed                      # partial boot, already live
 ```
 
-`e.phase` is `"plan"` for a pre-commit, graph-wide fault (a dependency cycle, a missing capability, a duplicate name) and `"commit"` when a candidate's own `on_start()` raised partway through the batch; `e.failed` names the offending candidate, and `e.cause` is the underlying exception. See the [`Core` reference](../reference/uxok/protocols/core.md) for the full contract.
+`e.phase` is `"plan"` for any fault caught before anything commits — a dependency cycle, a missing capability, a duplicate name, a source that fails to materialize, a `max_plugins` overflow, a provider that does not implement its declared protocol, or (under `error_on_conflict`) a duplicate provider — and `"commit"` when a candidate's own `on_start()` raised partway through the batch. `e.failed` names the offending candidate — its origin, its plugin name, or a `"sources[N]"` positional sentinel for an unnamed source that failed to materialize — and is `None` only for faults not attributable to one candidate (a cycle, a duplicate-provider collision, a `max_plugins` overflow); `e.cause` is the underlying exception. See [`API.md`](../manifests/API.md) for the full contract.
 
 ## 2. Register providers before consumers (manual ordering)
 

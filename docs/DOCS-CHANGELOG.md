@@ -2,6 +2,8 @@
 
 <!-- One line per note added, updated, or removed. Format: YYYY-MM-DD | action | path — description -->
 
+2026-07-03 | updated | docs/how-to/how-to-boot-a-plugin-graph-in-order.md — review F-3/F-4: BatchLoadError paragraph reconciled with the hardened plan phase (full pre-commit fault list, failed=None only for the three graph-wide faults, sources[N] sentinel); dead ../reference/ link repointed at docs/manifests/API.md
+2026-07-03 | updated | docs/tutorials/getting-started.md — review F-2: host.py block's docstring run instruction made path-neutral (`python -m <package>.host`); synced byte-for-byte with examples/getting_started/host.py
 2026-07-03 | updated | docs/manifests/API.md — RFC 0008: added BatchLoadError to §1 __all__/import block and §11 uxok/uxok.errors blocks (twelve->thirteen top-level names); added load_plugins row + Notes to §2.2; added BatchLoadError to §8 inheritance tree, both import blocks, and Constructors (six->seven exceptions)
 2026-07-03 | updated | docs/how-to/how-to-boot-a-plugin-graph-in-order.md — RFC 0008: new lead section "Boot the whole graph with load_plugins" (sources list, both host rollback recipes); demoted manual-ordering/build_host/polling sections to steps 2-4
 2026-07-03 | updated | docs/how-to/index.md — boot-a-plugin-graph blurb now leads with core.load_plugins()

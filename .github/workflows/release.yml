@@ -1,29 +1,38 @@
-# Release pipeline — build, verify, and publish uxok to PyPI on version tags.
+# Release pipeline — build, verify, and publish uxok, TestPyPI first.
+#
+# Two entry points:
+#   * push a `v*` tag  -> build -> TestPyPI -> PyPI (a full release; PyPI only
+#     runs behind a green TestPyPI publish).
+#   * run manually      -> build -> TestPyPI (a dry run that exercises the
+#     TestPyPI path without ever touching real PyPI).
 #
 # Trusted Publishing (OIDC): this workflow uses NO API tokens or secrets. Before
-# the first `v*` tag is pushed, the PyPI Trusted Publisher for `hiddenfalls42/uxok`
-# MUST be registered (PyPI -> the uxok project -> Publishing -> add a GitHub
-# publisher with owner `hiddenfalls42`, repo `uxok`, workflow `release.yml`,
-# environment `pypi`). Until that registration exists the publish step will fail
-# OIDC authentication.
+# the FIRST run, BOTH trusted publishers must be registered — a package cannot
+# publish until its publisher exists:
+#   * TestPyPI: https://test.pypi.org -> the uxok project -> Publishing -> add a
+#     GitHub publisher: owner `hiddenfalls42`, repo `uxok`, workflow
+#     `release.yml`, environment `testpypi`.
+#   * PyPI:     https://pypi.org      -> the uxok project -> Publishing -> add a
+#     GitHub publisher: owner `hiddenfalls42`, repo `uxok`, workflow
+#     `release.yml`, environment `pypi`.
+# The environment name in each PyPI publisher MUST match the `environment:` of
+# the corresponding job below, or OIDC authentication fails.
+
 name: Release
 
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
 
-# Least privilege by default; the publish job widens id-token for OIDC.
+# Least privilege by default; the publish jobs widen id-token for OIDC.
 permissions:
   contents: read
 
 jobs:
-  release:
-    name: Build and publish to PyPI
+  build:
+    name: Build and check distributions
     runs-on: ubuntu-latest
-    environment: pypi
-    permissions:
-      contents: read
-      id-token: write # OIDC token for PyPI Trusted Publishing (no secrets)
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
@@ -35,9 +44,12 @@ jobs:
         run: python -m build
       - name: Twine check
         run: twine check dist/*
-      # Tag/version consistency gate: the pushed tag (minus leading `v`) MUST
-      # equal project.version in pyproject.toml, or the release aborts loudly.
+      # Tag/version consistency gate: on a tag push, the pushed tag (minus
+      # leading `v`) MUST equal project.version in pyproject.toml, or the
+      # release aborts loudly. Skipped for manual (workflow_dispatch) dry runs,
+      # which carry no tag.
       - name: Assert tag matches project.version
+        if: github.ref_type == 'tag'
         env:
           GIT_TAG: ${{ github.ref_name }}
         run: |
@@ -48,5 +60,47 @@ jobs:
             echo "::error::pushed tag v${tag_version} does not match project.version ${proj_version}"
             exit 1
           fi
+      - name: Upload distributions
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  publish-testpypi:
+    name: Publish to TestPyPI
+    needs: build
+    runs-on: ubuntu-latest
+    environment: testpypi
+    permissions:
+      contents: read
+      id-token: write # OIDC token for TestPyPI Trusted Publishing (no secrets)
+    steps:
+      - name: Download distributions
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: dist
+          path: dist/
+      - name: Publish to TestPyPI (Trusted Publishing)
+        uses: pypa/gh-action-pypi-publish@76f52bc884231f62b9a034ebfe128415bbaabdfc # v1.12.4
+        with:
+          repository-url: https://test.pypi.org/legacy/
+
+  publish-pypi:
+    name: Publish to PyPI
+    needs: publish-testpypi
+    # Only a real tagged release reaches PyPI; manual dry runs stop at TestPyPI.
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      contents: read
+      id-token: write # OIDC token for PyPI Trusted Publishing (no secrets)
+    steps:
+      - name: Download distributions
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: dist
+          path: dist/
       - name: Publish to PyPI (Trusted Publishing)
         uses: pypa/gh-action-pypi-publish@76f52bc884231f62b9a034ebfe128415bbaabdfc # v1.12.4

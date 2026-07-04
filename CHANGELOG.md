@@ -184,9 +184,12 @@ commit as its CHANGELOG entry.
   `"open"` short-circuits before the gate), and zero runtime cost (a synchronous set-union
   membership test, no new awaits). `CapabilityAccessError`'s message now reports the runtime
   grant and points at `resolves`.
-- Release pipeline: tag-triggered `.github/workflows/release.yml` that builds the sdist and
-  wheel, runs `twine check`, asserts the pushed `v*` tag matches `project.version`, and
-  publishes to PyPI via Trusted Publishing (OIDC, no token secrets) in a `pypi` environment.
+- Release pipeline: `.github/workflows/release.yml` that builds the sdist and wheel, runs
+  `twine check`, and publishes via Trusted Publishing (OIDC, no token secrets), TestPyPI
+  first. A pushed `v*` tag (whose value must match `project.version`) flows
+  build → TestPyPI (`testpypi` environment) → PyPI (`pypi` environment), with PyPI gated
+  behind a green TestPyPI publish; a manual `workflow_dispatch` run does build → TestPyPI
+  only, a dry run that exercises the publish path without touching real PyPI.
 - `MANIFEST.in` for deliberate sdist curation — ships the kernel source plus
   `LICENSE`/`README.md`/`CHANGELOG.md`/`pyproject.toml`; tests, `.github`, docs, examples, and
   scripts are pruned (tests are intentionally excluded from the sdist for leanness).

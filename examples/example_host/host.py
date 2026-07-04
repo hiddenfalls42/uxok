@@ -1,26 +1,23 @@
 """host.py — composes the conversational example into a runnable program.
 
-A *host* boots a :class:`~uxok.Core`, registers a graph of plugins on it, and
+A *host* boots a :class:`~uxok.Core`, hands it a folder of plugin sources, and
 keeps it alive. This is the extended sibling of the minimal ``getting_started/``
-example: the same Model / Agent / persona-hook conversation, one plugin per
-module, but the host exercises the kernel features a real program leans on:
+example — the same hot-loading host shape, grown the features a real program
+leans on:
 
-    build_host(core)       register the graph in dependency order
+    build_host(core)       batch-load every plugin module via core.load_plugins
     core.load_plugin(...)  hot-swap the persona mid-conversation
     ShutdownHandler        trap signals + system.shutdown, drain cleanly
 
-The graph it builds:
+The graph it loads:
 
     user.says ──▶ Agent ──hook "persona"──▶ Persona   (hot-reloaded ──▶ grumpy)
                     │ requires "llm"
                     └──▶ Model
 
 ``build_host`` is shared by ``main`` and the test suite, so the running program
-and the tested program never drift.
-
-Run it:
-
-    python -m examples.example_host.host
+and the tested program never drift. Run it as a module:
+``python -m <package>.host``.
 """
 
 from __future__ import annotations
@@ -30,31 +27,28 @@ import logging
 import sys
 from pathlib import Path
 
-from examples.example_host.agent import Agent
-from examples.example_host.model import Model
-from examples.example_host.persona import Persona
-from examples.example_host.shutdown import ShutdownHandler
 from uxok import Core
 from uxok.protocols import Event
 
 _HERE = Path(__file__).resolve().parent
+_HOST_FILES = {"__init__.py", "host.py"}
+_SWAP_PAYLOADS = {"grumpy_persona.py"}  # hot-reloaded in later; not part of the boot graph
+
 logger = logging.getLogger("example_host")
 
 
-async def build_host(core: Core) -> ShutdownHandler:
-    """Register the conversation graph on ``core`` and return its ShutdownHandler.
+async def build_host(core: Core) -> None:
+    """Load every plugin module in this folder, regardless of dependency order.
 
-    Registration follows the dependency arrows: the providers (``Model`` for the
-    ``llm`` capability, ``Persona`` for the ``persona`` hook) come up before the
-    ``Agent`` that consumes them. The ShutdownHandler is registered last so it
-    traps signals only once the graph is live.
+    ``core.load_plugins`` works out the commit order from each plugin's declared
+    capabilities (``Model`` before the ``Agent`` that requires ``"llm"``), so the
+    host names no plugin and no ordering. ``grumpy_persona.py`` is skipped: it is
+    the hot-reload payload ``main`` loads live, and booting it here would collide
+    with ``persona.py`` (two plugins named ``persona`` in one batch).
     """
-    await core.register_plugin(Model())  # provides "llm"
-    await core.register_plugin(Persona())  # contributes the "persona" hook
-    await core.register_plugin(Agent())  # requires "llm"
-    shutdown = ShutdownHandler()
-    await core.register_plugin(shutdown)
-    return shutdown
+    skip = _HOST_FILES | _SWAP_PAYLOADS
+    paths = [path for path in sorted(_HERE.glob("*.py")) if path.name not in skip]
+    await core.load_plugins([(path.read_text(), str(path)) for path in paths])
 
 
 async def say(core: Core, text: str) -> None:
@@ -63,7 +57,7 @@ async def say(core: Core, text: str) -> None:
     Event dispatch is fire-and-forget, so the brief sleep lets the agent's handler
     (and its nested ``agent.says`` emit) run before the next line.
     """
-    print(f"user:  {text}", file=sys.stderr)  # noqa: T201 — demo output is the point
+    print(f"user:  {text}")  # noqa: T201 — demo output is the point
     await core.events.publish(Event("user.says", {"text": text}))
     await asyncio.sleep(0.1)
 
@@ -75,21 +69,23 @@ async def main() -> None:
         format="%(asctime)s %(levelname)-8s %(name)s: %(message)s",
     )
 
-    core = Core()
-    async with core:
-        shutdown = await build_host(core)
+    async with Core() as core:  # context manager starts/stops the kernel
+        await build_host(core)
+        # The host holds no plugin instances — it resolves the shutdown handler
+        # through the capability surface, the same door the plugins use.
+        shutdown = await core.get_capability("shutdown_handling")
 
         await say(core, "hello there")
 
         # Hot-swap the persona from a sibling module's source — zero downtime, and
         # the agent's next reply speaks in the new voice without any change to it.
-        grumpy = (_HERE / "grumpy_persona.py").read_text()
-        await core.load_plugin(grumpy, origin=str(_HERE / "grumpy_persona.py"))
-        print("...[hot-reloaded the persona]...", file=sys.stderr)  # noqa: T201
+        grumpy = _HERE / "grumpy_persona.py"
+        await core.load_plugin(grumpy.read_text(), origin=str(grumpy))
+        print("...[hot-reloaded the persona]...")  # noqa: T201
 
         await say(core, "what's the weather like?")
 
-        print("conversation done — Ctrl-C to exit", file=sys.stderr)  # noqa: T201
+        print("conversation done — Ctrl-C to exit")  # noqa: T201
         await shutdown.wait_for_shutdown()
 
 

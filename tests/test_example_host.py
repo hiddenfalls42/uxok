@@ -3,7 +3,7 @@
 This suite is also the acceptance test for the example: every kernel feature the
 host demonstrates is exercised here — the event bus (``user.says`` → ``agent.says``),
 the hook extension point (``persona``), the capability surface (``get_capability``),
-ordered boot (``build_host``), hot reload
+batch source-loading boot (``build_host`` → ``core.load_plugins``), hot reload
 (``core.load_plugin`` swapping the persona), and graceful shutdown
 (``system.shutdown``). The whole suite runs under both ``capability_access="open"``
 and ``"declared"`` so the graph is proven under the enforced secure-capability
@@ -18,8 +18,10 @@ from pathlib import Path
 
 import pytest
 import pytest_asyncio
-from examples.example_host import Agent, Model, ShutdownHandler
+from examples.example_host.agent import Agent
 from examples.example_host.host import build_host
+from examples.example_host.model import Model
+from examples.example_host.shutdown import ShutdownHandler
 
 from uxok import Core
 from uxok.protocols import CoreState, Event
@@ -56,18 +58,19 @@ async def _replies(core) -> list[str]:
 
 
 # ---------------------------------------------------------------------------
-# Composition + ordered boot
+# Composition + batch source-loading boot
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_build_host_registers_graph_and_exposes_capabilities(core):
-    shutdown = await build_host(core)
+async def test_build_host_loads_graph_and_exposes_capabilities(core):
+    await build_host(core)
 
-    assert isinstance(shutdown, ShutdownHandler)
-    # The model provider is resolvable through the capability surface the moment
-    # build_host returns — providers are registered before the agent that needs them.
+    # Every provider is resolvable through the capability surface the moment
+    # build_host returns — load_plugins commits providers before the agent that
+    # needs them, and the host holds no plugin instances at all.
     assert await core.get_capability("llm") is not None
+    assert await core.get_capability("shutdown_handling") is not None
 
 
 # ---------------------------------------------------------------------------

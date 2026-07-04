@@ -11,7 +11,6 @@ Assistant: event-driven, non-blocking, replies published back onto the bus.
 
 from __future__ import annotations
 
-import sys
 from typing import TYPE_CHECKING
 
 from uxok import Plugin, event
@@ -37,5 +36,5 @@ class Agent(Plugin):
         # persona is picked up immediately — no re-resolution needed here.
         persona = await self.hook("persona", firstresult=True)
         reply = await self.llm.reply(text, persona)
-        print(f"agent: {reply}", file=sys.stderr)  # noqa: T201 — demo output is the point
+        print(f"agent: {reply}")  # noqa: T201 — demo output is the point
         await self.emit("agent.says", {"text": reply})

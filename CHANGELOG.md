@@ -8,6 +8,11 @@ commit as its CHANGELOG entry.
 
 ## [Unreleased]
 
+## [0.1.0] — 2026-07-05
+
+Initial public release of **uxok** — an experimental, hot-loading plugin microkernel
+for Python.
+
 ### Added
 - Materializer plugin discovery counts only Plugin subclasses **defined in the
   source** (RFC 0012): the shared `_materialize_plugin` step behind `load_plugin`,
@@ -51,76 +56,15 @@ commit as its CHANGELOG entry.
   `"sources[N]"` positional sentinel for an anonymous source that fails to materialize
   (`None` only for graph-wide faults) — so the host can implement its own
   rollback-or-keep policy. `docs/manifests/API.md` §2.2 and §8 updated in this commit.
-
-### Changed
-- `uxok.protocols.Core` (the public `Core` Protocol): `load_plugin` now declares the
-  `origin` parameter it was missing since `origin` was added to the concrete
-  `Core.load_plugin` (a gap the `load_plugins`/`try_load_plugins` reconciliation pass
-  did not catch); the protocol also gains `get_plugin`, `start`, `stop`, and the `slip`
-  property, which were on the concrete `Core` and in `API.md` but absent from the
-  Protocol. No behavior change — the concrete `Core` already satisfied the wider
-  surface; this only closes the reference/typing gap between the two.
-- Documentation: `docs/manifests/API.md` §8 and `errors.py`'s module docstring now state the
-  stdlib-vs-custom-exception rule explicitly — local, immediate input validation (bad
-  argument shape, unknown hook/enum name, missing attribute) raises the matching stdlib
-  exception (`ValueError`, `KeyError`, `AttributeError`); the `uxok.errors` hierarchy is
-  reserved for domain faults tied to core/plugin/capability runtime state. **No runtime
-  behavior change**: this codifies existing practice, it does not alter any raise site.
-- Shared `topo_sort` (`utils/_helpers.py`) is now order-preserving: ties break by input
-  order instead of by hash-set iteration, so its output is a deterministic function of the
-  input. This also makes `registry.load_order()` — and therefore `Core.stop()` teardown
-  order among independent plugins — deterministic (registration order, reversed).
-- Capability-collision error message: under `capability_collision="error_on_conflict"`, a
-  rejected second provider now raises `PluginError` with
-  `Capability '<name>' is already provided by: <providers> (capability_collision policy is
-  'error_on_conflict')` instead of the misleading `Capability '<name>' not available.
-  Available: <providers>` (that wording belongs to the missing-capability case and described
-  the opposite condition). Exception type and raise sites are unchanged; only the message
-  text differs.
-- Error-message overhaul (kernel-wide audit of raise sites; messages now describe the actual
-  condition and carry identifying context):
-  - `Core.get_capability(..., tag=...)`: a tag mismatch no longer collapses into the generic
-    missing-capability `CapabilityError` (which self-contradictorily listed the capability as
-    both unavailable and available) — the precise `No provider for capability '<cap>' has tag
-    '<tag>'. Provider tags: [...]` message is preserved through the rewrap.
-  - `MissingCapabilityError`: message is now `No registered plugin provides required
-    capability: <caps> (required by plugin '<name>') …` with load-order guidance, replacing
-    the garbled "Develop Capability or remove dependency" advice; kernel raise sites also
-    pass the available-capabilities list.
-  - Registry name conflict: names the colliding plugin name and the existing holder's id, and
-    points at `name=` (was `Plugin <uuid>: name already in use`).
-  - Dependency cycle in `load_order()`: names the plugins on the cycle.
-  - `load_plugin`: module-execution failures (e.g. a failing top-level import) now say
-    `Plugin code failed while executing at module top level: …` instead of claiming a
-    compile failure; genuine `SyntaxError`s keep the compile wording.
-  - Active-operation guard and dependents-present rejections: name the plugin (not just its
-    UUID) and state the way forward (wait / unregister dependents / `force=True`).
-  - Hook registration with a non-callable, and invalid plugin names: messages now name the
-    hook/plugin and state the actual rule (plugin names must also start with a letter;
-    "PluginProtocol" jargon dropped).
-  - Sealed return guard: `CapabilityAccessError.plugin_name` is now `""` instead of the
-    leaked type's name (the type remains in the message) — no plugin identity exists at
-    that seam, and a type name masquerading as a plugin name misleads programmatic handlers.
-
-### Breaking
-- `Plugin.start()` after the instance was stopped now raises `PluginError` (was a bare
-  `RuntimeError`), naming the plugin and pointing at the one-shot instance rule and
-  `get_state()`/`restore_state()`. All sibling lifecycle failures already raise
-  `PluginError`, so supervisors catching it no longer miss this case. Code that caught
-  `RuntimeError` for this path must catch `PluginError` (`docs/manifests/API.md` §Plugin
-  updated in this commit).
-- `MissingCapabilityError.__init__` gained a trailing optional `requirer: str | None = None`
-  keyword (additive; sets `self.requirer`). Positional construction is unaffected.
-- Documentation: `self.get_capability(...)` is now the single canonical plugin-author idiom
-  for resolving a capability (the convenience sibling of `self.emit`/`self.hook`/
-  `self.config`). `self.core.get_capability(...)` is demoted to an internal facet /
-  security-model detail — it remains callable and enforces the identical `requires ∪ resolves`
-  gate (it is the gated `CoreFacet` route exercised by the secure-capability suite), but is no
-  longer presented as a co-equal plugin idiom and is removed from reader-facing usage examples
-  (README, tutorial). **No runtime behavior change**: both routes still work identically; this
-  is a docs/guidance clarification only.
-
-### Added
+- Release pipeline: `.github/workflows/release.yml` that builds the sdist and wheel, runs
+  `twine check`, and publishes via Trusted Publishing (OIDC, no token secrets), TestPyPI
+  first. A pushed `v*` tag (whose value must match `project.version`) flows
+  build → TestPyPI (`testpypi` environment) → PyPI (`pypi` environment), with PyPI gated
+  behind a green TestPyPI publish; a manual `workflow_dispatch` run does build → TestPyPI
+  only, a dry run that exercises the publish path without touching real PyPI.
+- `MANIFEST.in` for deliberate sdist curation — ships the kernel source plus
+  `LICENSE`/`README.md`/`CHANGELOG.md`/`pyproject.toml`; tests, `.github`, docs, examples, and
+  scripts are pruned (tests are intentionally excluded from the sdist for leanness).
 - Ambient `check_plugin` on the attenuated facet (RFC 0006): `CoreFacet` now forwards
   `check_plugin(candidate) -> AdmissionResult`, mirroring `list()`, so a plugin under
   `capability_access="declared"`/`"sealed"` can call `self.core.check_plugin(...)` with **no
@@ -196,17 +140,62 @@ commit as its CHANGELOG entry.
   `"open"` short-circuits before the gate), and zero runtime cost (a synchronous set-union
   membership test, no new awaits). `CapabilityAccessError`'s message now reports the runtime
   grant and points at `resolves`.
-- Release pipeline: `.github/workflows/release.yml` that builds the sdist and wheel, runs
-  `twine check`, and publishes via Trusted Publishing (OIDC, no token secrets), TestPyPI
-  first. A pushed `v*` tag (whose value must match `project.version`) flows
-  build → TestPyPI (`testpypi` environment) → PyPI (`pypi` environment), with PyPI gated
-  behind a green TestPyPI publish; a manual `workflow_dispatch` run does build → TestPyPI
-  only, a dry run that exercises the publish path without touching real PyPI.
-- `MANIFEST.in` for deliberate sdist curation — ships the kernel source plus
-  `LICENSE`/`README.md`/`CHANGELOG.md`/`pyproject.toml`; tests, `.github`, docs, examples, and
-  scripts are pruned (tests are intentionally excluded from the sdist for leanness).
+- Kernel primitives: event bus, hook system, plugin registry, capability system, and
+  the `Plugin` developer-experience base class.
+- Hot-loading lifecycle: register / unregister / hot-swap plugins on a running core,
+  with a constitutional state graph (INITIALIZED → RUNNING → STOPPING → STOPPED/FAILED).
+- Concurrent fire-and-forget event dispatch with causal ordering.
+- Constitutional public API defined in `docs/manifests/API.md`.
 
 ### Changed
+- `uxok.protocols.Core` (the public `Core` Protocol): `load_plugin` now declares the
+  `origin` parameter it was missing since `origin` was added to the concrete
+  `Core.load_plugin` (a gap the `load_plugins`/`try_load_plugins` reconciliation pass
+  did not catch); the protocol also gains `get_plugin`, `start`, `stop`, and the `slip`
+  property, which were on the concrete `Core` and in `API.md` but absent from the
+  Protocol. No behavior change — the concrete `Core` already satisfied the wider
+  surface; this only closes the reference/typing gap between the two.
+- Documentation: `docs/manifests/API.md` §8 and `errors.py`'s module docstring now state the
+  stdlib-vs-custom-exception rule explicitly — local, immediate input validation (bad
+  argument shape, unknown hook/enum name, missing attribute) raises the matching stdlib
+  exception (`ValueError`, `KeyError`, `AttributeError`); the `uxok.errors` hierarchy is
+  reserved for domain faults tied to core/plugin/capability runtime state. **No runtime
+  behavior change**: this codifies existing practice, it does not alter any raise site.
+- Shared `topo_sort` (`utils/_helpers.py`) is now order-preserving: ties break by input
+  order instead of by hash-set iteration, so its output is a deterministic function of the
+  input. This also makes `registry.load_order()` — and therefore `Core.stop()` teardown
+  order among independent plugins — deterministic (registration order, reversed).
+- Capability-collision error message: under `capability_collision="error_on_conflict"`, a
+  rejected second provider now raises `PluginError` with
+  `Capability '<name>' is already provided by: <providers> (capability_collision policy is
+  'error_on_conflict')` instead of the misleading `Capability '<name>' not available.
+  Available: <providers>` (that wording belongs to the missing-capability case and described
+  the opposite condition). Exception type and raise sites are unchanged; only the message
+  text differs.
+- Error-message overhaul (kernel-wide audit of raise sites; messages now describe the actual
+  condition and carry identifying context):
+  - `Core.get_capability(..., tag=...)`: a tag mismatch no longer collapses into the generic
+    missing-capability `CapabilityError` (which self-contradictorily listed the capability as
+    both unavailable and available) — the precise `No provider for capability '<cap>' has tag
+    '<tag>'. Provider tags: [...]` message is preserved through the rewrap.
+  - `MissingCapabilityError`: message is now `No registered plugin provides required
+    capability: <caps> (required by plugin '<name>') …` with load-order guidance, replacing
+    the garbled "Develop Capability or remove dependency" advice; kernel raise sites also
+    pass the available-capabilities list.
+  - Registry name conflict: names the colliding plugin name and the existing holder's id, and
+    points at `name=` (was `Plugin <uuid>: name already in use`).
+  - Dependency cycle in `load_order()`: names the plugins on the cycle.
+  - `load_plugin`: module-execution failures (e.g. a failing top-level import) now say
+    `Plugin code failed while executing at module top level: …` instead of claiming a
+    compile failure; genuine `SyntaxError`s keep the compile wording.
+  - Active-operation guard and dependents-present rejections: name the plugin (not just its
+    UUID) and state the way forward (wait / unregister dependents / `force=True`).
+  - Hook registration with a non-callable, and invalid plugin names: messages now name the
+    hook/plugin and state the actual rule (plugin names must also start with a letter;
+    "PluginProtocol" jargon dropped).
+  - Sealed return guard: `CapabilityAccessError.plugin_name` is now `""` instead of the
+    leaked type's name (the type remains in the message) — no plugin identity exists at
+    that seam, and a type name masquerading as a plugin name misleads programmatic handlers.
 - **Breaking (pre-1.0):** the kernel no longer auto-starts on first plugin registration. `register_plugin`, `load_plugin`, and hot-reload now require the core to be `RUNNING` and raise `CoreError` otherwise. Call `core.start()` (or use `async with Core() as core:`) before registering plugins. The context-manager path and already-started cores are unaffected — hosts that already start explicitly see no behavioral change.
 - **Breaking (pre-1.0):** plugin construction is now coreless (RFC 0001 §3.2.3). The core
   is no longer a constructor argument; the kernel attaches it at register/reload time, so
@@ -214,7 +203,7 @@ commit as its CHANGELOG entry.
   from `def __init__(self, core): super().__init__(core, ...)` to
   `def __init__(self): super().__init__(...)`. Default `capability_access="open"` keeps
   `self.core` as the real `Core`, so runtime behavior is otherwise unchanged.
-- Replaced the reference `supervisor` plugin with `plugins/example_host/` — a small,
+- Replaced the reference `supervisor` plugin with `examples/example_host/` — a small,
   runnable sensor/alerting host that wires every kernel primitive (event bus, hook
   extension points, capability provider/consumer, lifecycle, the tick system, config
   schema, state continuity, and graceful shutdown) as a worked "hello world." The deleted
@@ -233,6 +222,24 @@ commit as its CHANGELOG entry.
   the docs site and issue tracker.
 - CI `security` job: replaced the deprecated `safety check` (now requires an account/auth)
   with `pip-audit`; the `safety` dev dependency is swapped for `pip-audit`.
+
+### Breaking
+- `Plugin.start()` after the instance was stopped now raises `PluginError` (was a bare
+  `RuntimeError`), naming the plugin and pointing at the one-shot instance rule and
+  `get_state()`/`restore_state()`. All sibling lifecycle failures already raise
+  `PluginError`, so supervisors catching it no longer miss this case. Code that caught
+  `RuntimeError` for this path must catch `PluginError` (`docs/manifests/API.md` §Plugin
+  updated in this commit).
+- `MissingCapabilityError.__init__` gained a trailing optional `requirer: str | None = None`
+  keyword (additive; sets `self.requirer`). Positional construction is unaffected.
+- Documentation: `self.get_capability(...)` is now the single canonical plugin-author idiom
+  for resolving a capability (the convenience sibling of `self.emit`/`self.hook`/
+  `self.config`). `self.core.get_capability(...)` is demoted to an internal facet /
+  security-model detail — it remains callable and enforces the identical `requires ∪ resolves`
+  gate (it is the gated `CoreFacet` route exercised by the secure-capability suite), but is no
+  longer presented as a co-equal plugin idiom and is removed from reader-facing usage examples
+  (README, tutorial). **No runtime behavior change**: both routes still work identically; this
+  is a docs/guidance clarification only.
 
 ### Fixed
 - `scripts/dev_utilities/bump_version.py`: matches the real `## [Unreleased]` heading (was
@@ -253,19 +260,5 @@ commit as its CHANGELOG entry.
   not a handle — `list()` cannot be a backdoor to invoking or holding another plugin's live
   instance. To act on a plugin, resolve it via the `kernel.lifecycle` grant (`get_plugin`)
   or a typed capability. Benign live reads (`status`, `ready`, `uptime`, `methods`) remain.
-
-## [0.1.0] — 2026-06-23
-
-Initial public release of **uxok** — an experimental, hot-loading plugin microkernel
-for Python.
-
-### Added
-- Kernel primitives: event bus, hook system, plugin registry, capability system, and
-  the `Plugin` developer-experience base class.
-- Hot-loading lifecycle: register / unregister / hot-swap plugins on a running core,
-  with a constitutional state graph (INITIALIZED → RUNNING → STOPPING → STOPPED/FAILED).
-- Concurrent fire-and-forget event dispatch with causal ordering.
-- Constitutional public API defined in `docs/manifests/API.md`.
-- Reference `supervisor` plugin demonstrating policy-as-a-plugin over kernel failure signals.
 
 [0.1.0]: https://github.com/hiddenfalls42/uxok/releases/tag/v0.1.0

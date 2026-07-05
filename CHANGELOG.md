@@ -9,6 +9,18 @@ commit as its CHANGELOG entry.
 ## [Unreleased]
 
 ### Added
+- Materializer plugin discovery counts only Plugin subclasses **defined in the
+  source** (RFC 0012): the shared `_materialize_plugin` step behind `load_plugin`,
+  `load_plugins`, and `try_load_plugins` now discriminates on
+  `obj.__module__ == pkg_name` (the synthetic package name, captured before exec), so
+  a class defined during the materializer's
+  `exec()` (stamped with the synthetic package name) counts, while a Plugin subclass
+  merely imported into module scope (e.g. for an `isinstance` check) does not. This
+  is strictly more permissive: any source with exactly one source-defined plugin
+  that previously raised "Multiple Plugin subclasses found" now loads; the only
+  narrowing is the (already anti-pattern) case of a source defining no plugin of its
+  own and relying on an imported Plugin subclass being discovered as "the plugin."
+  `docs/manifests/API.md` §2.2 updated in this commit.
 - `Core.try_load_plugins(sources)` (RFC 0010): the best-effort sibling of `load_plugins`.
   Backed by the same planner, it commits the **maximal loadable subgraph** and returns a
   `BatchLoadReport` instead of ever raising `BatchLoadError`. Each faulting candidate — and

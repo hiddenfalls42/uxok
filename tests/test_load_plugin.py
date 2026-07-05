@@ -248,6 +248,37 @@ class Plugin2(Plugin):
             await started_core.load_plugin(code)
 
     @pytest.mark.asyncio
+    async def test_load_plugin_ignores_imported_plugin_subclass(self, started_core: Core):
+        """A source-defined plugin loads even if it imports another Plugin
+        subclass at module scope (e.g. for an isinstance check)."""
+        code = """
+from tests.helpers import StubPlugin  # imported for reference, not defined here
+
+class TestPlugin(Plugin):
+    def __init__(self, **kwargs):
+        super().__init__(name="test", **kwargs)
+        assert not isinstance(self, StubPlugin)
+"""
+        await started_core.load_plugin(code)
+        plugin = await started_core.get_plugin("test")
+        assert plugin is not None
+
+    @pytest.mark.asyncio
+    async def test_load_plugin_survives_name_reassignment(self, started_core: Core):
+        """Reassigning the module-level __name__ global in the source must not
+        exclude a class defined earlier in the same source from discovery."""
+        code = """
+class TestPlugin(Plugin):
+    def __init__(self, **kwargs):
+        super().__init__(name="test", **kwargs)
+
+__name__ = "oops"
+"""
+        await started_core.load_plugin(code)
+        plugin = await started_core.get_plugin("test")
+        assert plugin is not None
+
+    @pytest.mark.asyncio
     async def test_load_plugin_emits_reloaded_event(self, started_core: Core):
         """core.plugin_reloaded event is emitted when a plugin is swapped."""
         code = """

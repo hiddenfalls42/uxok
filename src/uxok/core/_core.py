@@ -484,7 +484,9 @@ class Core(CoreProtocol):
               ``on_start()``.
 
         Args:
-            code: Python source code containing exactly one Plugin subclass.
+            code: Python source code containing exactly one Plugin subclass
+                defined in the source. Plugin subclasses merely imported into
+                module scope (e.g. for an isinstance check) are not counted.
             origin: Optional source file path. When given, the code is executed as
                 a package rooted at the file's folder, so the plugin may import
                 sibling helper modules relatively (``from . import _helper``) — a
@@ -499,7 +501,8 @@ class Core(CoreProtocol):
 
         Raises:
             CoreError: If the core is not in RUNNING state.
-            PluginError: If no Plugin subclass is found, or loading fails.
+            PluginError: If no Plugin subclass is defined in the source, or
+                loading fails.
         """
         if self.state is not CoreState.RUNNING:
             raise CoreError("Core must be started before loading plugins")
@@ -526,7 +529,9 @@ class Core(CoreProtocol):
         :meth:`load_plugins` (many candidates materialized before planning).
 
         Args:
-            code: Python source code containing exactly one Plugin subclass.
+            code: Python source code containing exactly one Plugin subclass
+                defined in the source. Plugin subclasses merely imported into
+                module scope (e.g. for an isinstance check) are not counted.
             origin: Optional source file path. When given, the code is executed as
                 a package rooted at the file's folder, so the plugin may import
                 sibling helper modules relatively (``from . import _helper``) — a
@@ -543,7 +548,7 @@ class Core(CoreProtocol):
 
         Raises:
             PluginError: If the code fails to compile or exec, no Plugin
-                subclass is found, or more than one is found.
+                subclass is defined in the source, or more than one is.
         """
         import sys
         import types
@@ -595,11 +600,18 @@ class Core(CoreProtocol):
                 ]:
                     sys.modules.pop(key, None)
 
-        # Discover Plugin subclass
+        # Discover Plugin subclass (source-defined only — a Plugin subclass imported
+        # into module scope, e.g. for an isinstance check, is not the plugin to load).
+        # Compared against pkg_name (captured before exec), not module.__name__ —
+        # the source could reassign the `__name__` global, which would otherwise
+        # falsely exclude classes defined earlier in the same source.
         plugin_classes = [
             obj
             for obj in vars(module).values()
-            if isinstance(obj, type) and issubclass(obj, Plugin) and obj is not Plugin
+            if isinstance(obj, type)
+            and issubclass(obj, Plugin)
+            and obj is not Plugin
+            and obj.__module__ == pkg_name
         ]
 
         if not plugin_classes:

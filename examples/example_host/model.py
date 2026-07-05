@@ -1,16 +1,9 @@
 """Model — provides the typed ``llm`` capability, in prose.
 
-Stands in for an inference backend. It *provides* the ``llm`` capability
-**typed**: ``provides={LLM}`` names a Protocol, so the kernel checks — at
-admission, structurally, method by method — that this class actually implements
-the contract it claims. The Protocol lives in this module and is *not* imported
-by any consumer: the agent states its own copy of the contract and the two are
-matched by shape and by the derived name (``LLM`` → ``"llm"``), never by import.
-
-``tags={"prose"}`` discriminates this provider from ``terse_model.py``, which
-provides the same capability — consumers pick a provider with
-``get_capability(..., tag=...)``. The ``suffix`` config field shows an optional
-setting with a default; the host may override it via ``plugin_configs``.
+``provides={LLM}`` names a Protocol, checked structurally at admission — never
+imported by consumers, matched by shape and by the derived name (``LLM`` →
+``"llm"``). ``tags={"prose"}`` distinguishes it from ``terse_model.py``, the
+other ``llm`` provider.
 """
 
 from __future__ import annotations

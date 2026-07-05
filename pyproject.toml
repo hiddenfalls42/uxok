@@ -13,7 +13,7 @@ license-files = ["LICENSE"]
 authors = [
   {name = "hiddenfalls42", email = "ingcrockett@gmail.com"}
 ]
-keywords = ["plugin", "kernel", "microkernel", "hot-loading", "async", "hooks", "events", "framework", "uxok"]
+keywords = ["plugin", "kernel", "microkernel", "hot-loading", "async", "hooks", "events", "framework", "uxok", "exokernel", "agentic"]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Intended Audience :: Developers",

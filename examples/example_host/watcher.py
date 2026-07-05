@@ -1,21 +1,9 @@
 """Watcher — hot-reloads plugin files that change on disk.
 
-The "downloaded policy" made ambient: edit ``grumpy_persona.py`` (or any plugin
-module in the watched folder) while the program runs, and the next scan
-hot-loads the new source — the very next reply speaks in the edited voice, with
-no restart. New files become fresh plugins; changed files hot-swap the plugin
-of the same name.
-
-Two kernel features carry it. Graph control comes from the reserved
-``kernel.lifecycle`` grant — declared in ``requires`` (always satisfiable, no
-provider needed) and resolved to a facet exposing exactly the four
-graph-control methods. Periodicity is the kernel's one recurring idiom:
-a self-rescheduling hook — the handler re-arms itself with
-``hook(name, at_tick=core.tick + n)`` — with the tick count derived from
-``core.config.tick_rate``, so the config field speaks seconds.
-
-``watch_dir`` is ``REQUIRED``: the kernel's config validation fails this
-plugin's start (and with it the whole batch) if the host forgets to supply it.
+Scans ``watch_dir`` on a self-rescheduling hook (``hook(name, at_tick=core.tick
++ n)``); a changed file hot-swaps the plugin of the same name via the
+``kernel.lifecycle`` facet, a new file becomes a fresh plugin. ``watch_dir`` is
+``REQUIRED``.
 """
 
 from __future__ import annotations

@@ -270,12 +270,14 @@ connect them at runtime.
 
 ## Next steps
 
-For the same conversation with the features a real host leans on — a persona whose
-state survives live hot-swaps, competing model providers selected by config, a
-watcher that hot-loads edited plugin files, a supervisor consuming the kernel's
-error signals, and signal-driven shutdown — read
-[`examples/example_host/`](https://github.com/hiddenfalls42/uxok/tree/main/examples/example_host),
-the destination this starter grows into.
+Continue to [Persona hot-reload](hot-reload.md): extract the `persona` hook into its
+own plugin and swap it for another one live, with no restart.
+
+For the destination this series grows into — a persona whose state survives live
+hot-swaps, competing model providers selected by config, a watcher that hot-loads
+edited plugin files, a supervisor consuming the kernel's error signals, and
+signal-driven shutdown — read
+[`examples/example_host/`](https://github.com/hiddenfalls42/uxok/tree/main/examples/example_host).
 
 To go deeper on any one primitive:
 

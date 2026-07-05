@@ -2,16 +2,14 @@
 
 The destination of the tutorial series — the minimal ``getting_started/``
 example grown, one feature per stage, into the program a real host resembles.
-The same hot-loading shape (``build_host`` batch-loads every plugin module from
-source via ``core.load_plugins``, importing none of them, all or nothing) now
-carries: two competing typed ``llm`` providers selected by tag from config, a
-cid-correlated conversation with no sleeps, a stateful persona whose reply
-count survives hot-swap, a watcher that hot-loads edited plugin files from
-disk, a roster mirroring every graph change, a supervisor consuming the
-kernel's error signals, and graceful signal shutdown — all under
-``capability_access="sealed"``. ``build_host_best_effort`` demonstrates the
-best-effort boot policy (``core.try_load_plugins``) as a foil to the shipped
-all-or-nothing ``build_host``.
+``host.py`` batch-loads every plugin module from source via
+``core.load_plugins`` (all or nothing) and waits for shutdown; it drives none
+of the plugins itself. The conductor plugin drives the demo conversation, two
+competing typed ``llm`` providers are selected by tag from config, a stateful
+persona's reply count survives hot-swap, a watcher hot-loads edited plugin
+files from disk, a roster mirrors every graph change, a supervisor consumes
+the kernel's error signals, and shutdown is graceful — all under
+``capability_access="sealed"``.
 
 Run it with ``python -m examples.example_host.host``;
 ``tests/test_example_host.py`` is its acceptance suite.

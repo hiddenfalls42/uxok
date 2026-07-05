@@ -1,17 +1,9 @@
 """Roster — mirrors the live plugin graph as it changes.
 
-Pure observation, zero grants: everything here is ambient under every
-``capability_access`` mode. Registration traffic arrives through the kernel's
-lifecycle *hooks* (``plugin.registered`` / ``plugin.unregistered`` — hooks, not
-events, registered dynamically with ``register_hook``); swap traffic arrives
-through the framework *events* (``core.plugin_reloaded``, and the
-``core.capability.*`` glob for rebound/revoked providers). ``core.list()`` is
-the discovery surface: the ``roster.report`` hook answers with a one-line
-summary built from the collection DSL, so the host can ask "what is running?"
-without holding a single plugin instance.
-
-Watch the teardown: ``core.stop()`` unregisters every plugin in reverse
-dependency order, and the roster prints each departure until its own turn comes.
+Pure observation, zero grants: ambient under every ``capability_access`` mode.
+Registration traffic arrives via the ``plugin.registered``/``unregistered``
+hooks, swap traffic via the ``core.plugin_reloaded`` and ``core.capability.*``
+events. ``roster.report`` answers with a one-line summary from ``core.list()``.
 """
 
 from __future__ import annotations

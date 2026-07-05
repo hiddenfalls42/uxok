@@ -1,14 +1,14 @@
 `example_host/` is the destination of the tutorial series: a small
 conversational-agent program, one plugin per module, that wires the kernel features
 a real host leans on — batch source-loading boot (`core.load_plugins`, importing no
-plugin class, all or nothing — with `build_host_best_effort` showing the best-effort
-`core.try_load_plugins` alternative), a cid-correlated conversation over the event bus (no
-sleeps), two competing **typed** `llm` providers selected by tag from config
-(`ConfigField`/`REQUIRED`), a stateful `persona` hook whose reply count survives
-**hot reload** (`get_state`/`restore_state`), a watcher that hot-loads edited plugin
-files from disk, a roster mirroring every graph change, a supervisor consuming the
-kernel's error signals, and graceful shutdown — all under
-`capability_access="sealed"`.
+plugin class, all or nothing), a `conductor` plugin driving a cid-correlated
+conversation over the event bus (no sleeps), two competing **typed** `llm` providers
+selected by tag from config (`ConfigField`/`REQUIRED`), a stateful `persona` hook
+whose reply count survives **hot reload** (`get_state`/`restore_state`), a watcher
+that hot-loads edited plugin files from disk, a roster mirroring every graph change,
+a supervisor consuming the kernel's error signals, and graceful shutdown — all under
+`capability_access="sealed"`. The host itself only boots the graph and waits; it
+drives none of the plugins (RFC 0011).
 
 Run it with `python -m examples.example_host.host`; `tests/test_example_host.py`
 is its acceptance suite and runs the whole graph under all three

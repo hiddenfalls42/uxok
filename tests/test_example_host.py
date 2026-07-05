@@ -13,27 +13,31 @@ fixture runs under all three ``capability_access`` modes — including
 """
 
 import asyncio
+import itertools
 from pathlib import Path
 
 import pytest
 import pytest_asyncio
 from examples.example_host.host import (
+    _boot_sources,
     build_host,
-    build_host_best_effort,
     host_configs,
 )
 from examples.example_host.model import Model
 from examples.example_host.shutdown import ShutdownHandler
 
 from uxok import BatchLoadError, Core, Plugin, StalePluginError
-from uxok.protocols import CoreState, Event
+from uxok.protocols import BatchLoadReport, CoreState, Event
 
 _EXAMPLE_DIR = Path(__file__).resolve().parents[1] / "examples" / "example_host"
 _GRUMPY = _EXAMPLE_DIR / "grumpy_persona.py"
 
 # Commit order is a deterministic function of the sources: sorted filenames,
 # reordered only by the requires edges (agent after BOTH llm providers).
+# conductor requires only the always-satisfiable kernel.lifecycle, so it commits
+# in its alphabetical slot rather than being pushed back like agent is.
 _EXPECTED_ORDER = (
+    "conductor",
     "model",
     "persona",
     "roster",
@@ -46,8 +50,14 @@ _EXPECTED_ORDER = (
 
 
 def _configs(**overrides: dict) -> dict:
-    """host_configs() with per-plugin overrides merged in."""
+    """host_configs() with per-plugin overrides merged in.
+
+    Conductor's demo autorun defaults off here so the rest of the suite stays
+    deterministic — test_conductor_drives_the_demo_conversation_end_to_end
+    covers the autorun=True path (the one main() actually ships with).
+    """
     configs = host_configs()
+    configs.setdefault("conductor", {})["autorun"] = False
     for plugin_name, fields in overrides.items():
         configs.setdefault(plugin_name, {}).update(fields)
     return configs
@@ -56,7 +66,7 @@ def _configs(**overrides: dict) -> dict:
 @pytest_asyncio.fixture(params=["open", "declared", "sealed"])
 async def core(request):
     """A fresh core under each capability_access mode, with guaranteed cleanup."""
-    c = Core(capability_access=request.param, plugin_configs=host_configs())
+    c = Core(capability_access=request.param, plugin_configs=_configs())
     await c.start()
     try:
         yield c
@@ -79,6 +89,14 @@ async def _ask(core, text: str, cid: str, timeout: float = 2.0) -> str:
         return await asyncio.wait_for(reply, timeout)
     finally:
         await core.events.unsubscribe(sub)
+
+
+async def _build_host_best_effort(
+    core, *, extra_sources: list[tuple[str, str | None]] = ()
+) -> BatchLoadReport:
+    """Test-only exercise of ``core.try_load_plugins`` (RFC 0010) — main() ships
+    the stricter all-or-nothing ``build_host``, not this best-effort boot."""
+    return await core.try_load_plugins([*_boot_sources(), *extra_sources])
 
 
 async def _until(predicate, timeout: float = 2.0, interval: float = 0.02):
@@ -112,7 +130,7 @@ async def test_build_host_commits_in_deterministic_topological_order(core):
 async def test_missing_required_config_fails_the_whole_batch():
     """watch_dir is REQUIRED: omitting it fails watcher's start at commit, and
     build_host's rollback policy unwinds the installed prefix — all or nothing."""
-    configs = host_configs()
+    configs = _configs()
     del configs["watcher"]
     c = Core(plugin_configs=configs)
     await c.start()
@@ -122,7 +140,7 @@ async def test_missing_required_config_fails_the_whole_batch():
 
         assert excinfo.value.phase == "commit"
         assert excinfo.value.failed == "watcher"
-        assert excinfo.value.installed == _EXPECTED_ORDER[:6]
+        assert excinfo.value.installed == _EXPECTED_ORDER[:7]
         # build_host unwound the committed prefix before re-raising.
         assert (await c.list()).count == 0
     finally:
@@ -133,7 +151,7 @@ async def test_missing_required_config_fails_the_whole_batch():
 async def test_build_host_best_effort_boots_the_full_graph(core):
     """With no broken sources, best-effort boot loads exactly what build_host
     would, in the same order, and reports nothing skipped."""
-    report = await build_host_best_effort(core)
+    report = await _build_host_best_effort(core)
 
     assert tuple(name for name, _ in report.loaded) == _EXPECTED_ORDER
     assert report.skipped == ()
@@ -145,7 +163,7 @@ async def test_build_host_best_effort_skips_a_broken_file_and_keeps_the_graph(co
     """One unparseable extra source is reported as materialize_error while the
     curated graph boots intact — the motivating case for try_load_plugins."""
     broken = ("def not valid python (", "broken_plugin.py")
-    report = await build_host_best_effort(core, extra_sources=[broken])
+    report = await _build_host_best_effort(core, extra_sources=[broken])
 
     assert tuple(name for name, _ in report.loaded) == _EXPECTED_ORDER
     assert [(s.origin, s.name, s.reason) for s in report.skipped] == [
@@ -160,7 +178,7 @@ async def test_strict_collision_policy_rejects_the_contested_graph_in_plan():
     """Under error_on_conflict the two llm providers are a plan-phase fault —
     nothing commits. The shipped graph deliberately relies on the default
     last_wins_with_warning policy plus tag selection."""
-    c = Core(capability_collision="error_on_conflict", plugin_configs=host_configs())
+    c = Core(capability_collision="error_on_conflict", plugin_configs=_configs())
     await c.start()
     try:
         with pytest.raises(BatchLoadError) as excinfo:
@@ -214,6 +232,34 @@ async def test_hot_swap_preserves_the_persona_count(core):
     await core.load_plugin(_GRUMPY.read_text(), origin=str(_GRUMPY))
 
     assert await _ask(core, "second", cid="t2") == "Grumpily #2: you said 'second'."
+
+
+# ---------------------------------------------------------------------------
+# Conductor — plugin-land drives the demo, not the host (RFC 0011)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_conductor_drives_the_demo_conversation_end_to_end():
+    """With autorun left at its default (True, same as main() ships with), the
+    conductor plugin says both demo lines, hot-swaps the persona via its own
+    kernel.lifecycle facet, and queries the roster — with no host or test code
+    calling say()/load_plugin/hooks.execute. This test only observes the effect
+    from outside: a probe message answered in the grumpy voice."""
+    c = Core(capability_access="sealed", plugin_configs=host_configs())
+    await c.start()
+    try:
+        await build_host(c)
+
+        probe_cids = itertools.count(1)
+
+        async def persona_is_grumpy():
+            reply = await _ask(c, "probe", cid=f"probe{next(probe_cids)}")
+            return reply.startswith("Grumpily")
+
+        assert await _until(persona_is_grumpy)
+    finally:
+        await c.stop()
 
 
 @pytest.mark.asyncio
@@ -338,7 +384,7 @@ async def test_roster_reports_the_live_graph(core):
 
     report = await core.hooks.execute("roster.report", firstresult=True)
 
-    assert report.startswith("8 plugins live")
+    assert report.startswith("9 plugins live")
     assert "llm" in report and "shutdown_handling" in report
 
 

@@ -1,15 +1,11 @@
-"""ShutdownHandler — owns graceful shutdown for a long-running host.
+"""ShutdownHandler — graceful shutdown for a long-running host.
 
-This is what turns a plugin graph into a *program*. It demonstrates the lifecycle hooks
-(``on_start``/``on_stop``) doing real work: ``on_start`` installs OS signal handlers,
-``on_stop`` removes them. It exposes :meth:`wait_for_shutdown` so the host's ``main`` can
-block until shutdown is requested — by SIGINT/SIGTERM, or by any plugin emitting
-``system.shutdown`` on the bus.
-
-Signal handling is platform-specific:
-  Unix:    SIGINT + SIGTERM via ``loop.add_signal_handler`` (async-native).
-  Windows: SIGINT + SIGBREAK via ``signal.signal``, bridged onto the asyncio loop with
-           ``call_soon_threadsafe`` (the handler fires on the main thread, not the loop).
+``on_start`` installs OS signal handlers, ``on_stop`` removes them;
+:meth:`wait_for_shutdown` blocks until SIGINT/SIGTERM or any plugin emitting
+``system.shutdown``. Signal handling is platform-specific: Unix uses
+``loop.add_signal_handler`` (async-native); Windows uses ``signal.signal``
+bridged onto the loop with ``call_soon_threadsafe``, since its handler fires on
+the main thread, not the loop.
 """
 
 from __future__ import annotations

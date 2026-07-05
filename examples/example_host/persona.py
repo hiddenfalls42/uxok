@@ -1,11 +1,8 @@
 """Persona — contributes the agent's voice through the ``persona`` hook.
 
-The host's hot-reload target — and, unlike the tutorial's first version, it is
-now *stateful*: it counts the replies it has voiced. ``get_state`` /
-``restore_state`` are the hot-reload state-handoff contract: when the host
-swaps in ``grumpy_persona.py`` the kernel calls ``get_state()`` on this
-instance and ``restore_state(state)`` on the replacement, so the count
-survives the swap — the very next reply says so.
+The hot-reload target: ``get_state``/``restore_state`` are the state-handoff
+contract the kernel calls across a swap, so this plugin's reply count
+survives being replaced by ``grumpy_persona.py``.
 """
 
 from __future__ import annotations

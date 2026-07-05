@@ -1,17 +1,10 @@
 """TerseModel — a second, competing provider of the ``llm`` capability.
 
-Same capability name, different voice, different ``tags``. Registering it
-alongside ``model.py`` makes ``llm`` a *contested* capability: under the default
-``capability_collision="last_wins_with_warning"`` policy the kernel logs a
-warning and lets both live, and consumers disambiguate with
-``get_capability("llm", tag=...)``. The agent's config decides which tag it
-asks for — swap the config, swap the model, no code change.
-
-The ``LLM`` Protocol here is this module's own statement of the contract —
-deliberately *not* imported from ``model.py``. Capability contracts are
-structural: both sides declare the shape they mean, the kernel checks
-providers against what they claim, and only strings and shapes ever cross a
-module boundary.
+Alongside ``model.py`` this makes ``llm`` a *contested* capability: both
+providers live under the default ``last_wins_with_warning`` collision policy,
+and consumers pick one with ``get_capability("llm", tag=...)``. The ``LLM``
+Protocol here is this module's own copy of the contract, not imported from
+``model.py``.
 """
 
 from __future__ import annotations

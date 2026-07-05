@@ -1,18 +1,9 @@
-"""Supervisor — the consumer of the kernel's error signals.
+"""Supervisor — consumes the kernel's error signals and evicts repeat offenders.
 
-Plugin failures are *signals*, not core states: the kernel emits
-``core.plugin_error`` / ``core.hook_error`` and keeps running; supervision
-policy lives in plugin-land. This plugin is that policy. It counts errors per
-plugin, and on the first failure defers a review with ``emit(at_tick=...)`` —
-the event-side twin of the watcher's deferred hook — so a burst of errors gets
-judged once, after it settles. A plugin that crossed ``max_errors`` by review
-time is evicted through the ``kernel.lifecycle`` facet (``get_plugin`` to
-confirm it still lives, ``unregister_plugin(force=True)`` to remove it even if
-others depend on it).
-
-Note the payload contract (API.md §12): ``plugin_name`` is absent on the raw
-event-handler path, so errors are keyed by ``plugin_id`` — which
-``unregister_plugin`` accepts directly.
+Counts ``core.plugin_error``/``core.hook_error`` per plugin; on the first
+failure, defers a review with ``emit(at_tick=...)`` so a burst gets judged once,
+after it settles. A plugin over ``max_errors`` by review time is evicted
+through the ``kernel.lifecycle`` facet.
 """
 
 from __future__ import annotations

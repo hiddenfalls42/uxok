@@ -1,18 +1,11 @@
 """Agent — the conversational consumer of the ``llm`` capability.
 
-The agent declares ``requires={LLM}`` with its *own* copy of the Protocol (it
-never imports either model module) and resolves the provider **typed and
-tagged** in ``on_start``: ``get_capability(LLM, tag=...)`` picks between the
-competing providers by tag — the tag comes from the agent's own config, so the
-host chooses the model per deployment, not per code change. Under
-``capability_access="sealed"`` the typed resolution returns a protocol-limited
-facet: the agent can call ``reply`` and nothing else.
-
-Each ``user.says`` event carries a correlation id (``cid``); the handler stays
-fast by pushing the actual work into ``create_background_task``, and the reply
-is emitted on the cid-suffixed topic ``agent.says.<cid>`` — the host (or any
-requester) awaits exactly its own answer on a glob subscription instead of
-sleeping. ``has_subscribers`` demand-gates the work: no listener, no LLM call.
+Resolves its provider typed and tagged in ``on_start``
+(``get_capability(LLM, tag=...)``); the tag comes from its own config, so the
+model is chosen per deployment, not per code change. Answers each
+``user.says`` on the cid-suffixed topic ``agent.says.<cid>``, in a background
+task so the handler stays fast; ``has_subscribers`` skips the LLM call when
+nobody's listening for that cid.
 """
 
 from __future__ import annotations

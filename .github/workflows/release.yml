@@ -85,6 +85,10 @@ jobs:
         uses: pypa/gh-action-pypi-publish@76f52bc884231f62b9a034ebfe128415bbaabdfc # v1.12.4
         with:
           repository-url: https://test.pypi.org/legacy/
+          # TestPyPI is a dry-run target; a version already uploaded there
+          # (e.g. from a manual dry run before the real tag) must not fail
+          # this job and block the downstream PyPI publish.
+          skip-existing: true
 
   publish-pypi:
     name: Publish to PyPI

@@ -143,8 +143,14 @@ jobs:
           cache-dependency-path: pyproject.toml
       - name: Install dev dependencies
         run: pip install -e ".[dev]"
+      # Non-blocking per-step: the job-level continue-on-error only keeps this
+      # job from failing the workflow, it does NOT run later steps after one
+      # fails. Bandit's exec/assert findings here are known and accepted
+      # (S102/S101 in the ruff config), but a Bandit failure must not silently
+      # skip pip-audit — the two scans are independent.
       - name: Bandit
         run: bandit -r src
+        continue-on-error: true
       # pip-audit replaces the deprecated `safety check` (which now requires an
       # account/auth). Audits the installed dependency set for known CVEs.
       - name: pip-audit
